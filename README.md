@@ -188,6 +188,7 @@ Export your analysis in multiple formats for further processing:
 - **Markdown Report** - Human-readable formatted report
 - **Plain Text Report** - Simple text format
 - **SVG Image** - Export the dependency graph visualization
+- **PDF Document** - Export the dependency graph as a printable PDF
 - **Raw JSON** - Simplified data export
 
 Click the "Export" button in the top bar after analysis to access all export options.

@@ -41,15 +41,21 @@ function loadAnalyzer(htmlPath) {
       return false;
     },
   };
-  vm.createContext(context);
+  vm.createContext(context, {
+    codeGeneration: {
+      strings: false,
+      wasm: false,
+    },
+  });
   const exposeExports =
     '\nthis.Parser = Parser;' +
     '\nthis.buildAnalysisData = buildAnalysisData;' +
     '\nthis.calcBlast = calcBlast;' +
     '\nthis.calcHealth = calcHealth;';
-  vm.runInContext(analyzerSource + '\n' + metricsSource + exposeExports, context, {
+  const script = new vm.Script(analyzerSource + '\n' + metricsSource + exposeExports, {
     filename: 'codeflow-analyzer.js',
   });
+  script.runInContext(context, { timeout: 1000 });
 
   return {
     Parser: context.Parser,
@@ -59,15 +65,12 @@ function loadAnalyzer(htmlPath) {
   };
 }
 
-function locateIndexHtml(actionDir, repoRoot) {
-  // 1) Adjacent to the Action (same repo as codeflow itself):
-  const adjacent = path.join(actionDir, '..', 'index.html');
+function locateIndexHtml(actionDir) {
+  // Always load the analyzer from the action package, not the repository being analyzed.
+  const adjacent = path.resolve(actionDir, '..', 'index.html');
   if (fs.existsSync(adjacent)) return adjacent;
-  // 2) Repo root (when the Action is run from inside codeflow's checkout):
-  const local = path.join(repoRoot, 'index.html');
-  if (fs.existsSync(local)) return local;
   throw new Error(
-    'Could not find index.html. Tried ' + adjacent + ' and ' + local + '.'
+    'Could not find CodeFlow analyzer source at ' + adjacent + '.'
   );
 }
 

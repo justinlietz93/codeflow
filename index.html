@@ -26,6 +26,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jsrsasign/11.1.0/jsrsasign-all-min.js" integrity="sha512-Eu9j+HZBor7muHf6IDWoWZ8FKVr6nKe9eIIVR28NEte4Y4GiYRlke26XGdR/re81XE/FfLoLYYVkvNk5GY9RvQ==" crossorigin="anonymous"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg==" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/web-tree-sitter@0.20.8/tree-sitter.js" integrity="sha512-HHbWn9jEdYHHREfFtaPv+eEgSfUSWj/IMe8cOuGAaQNnr9NQiD5ihxOkj1IFu3YGYHB8DHyHfxqxI7kI0b4g5A==" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" integrity="sha512-qZvrmS2ekKPF2mSznTQsxqPgnpkI4DNTlrdUmTzrDgektczlKNRRhy5X5AAOnx5S09ydFYWWNSfcEqDTTHgtNA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
     <style>
 :root{--bg0:#0a0a0c;--bg1:#0f0f12;--bg2:#161619;--bg3:#1c1c21;--bg4:#252529;--hover:#2a2a30;--border:#2d2d35;--border2:#222228;--t0:#f0f0f2;--t1:#c8c8cd;--t2:#8b8b95;--t3:#5c5c66;--acc:#00ff9d;--acc2:#00cc7d;--accbg:rgba(0,255,157,0.08);--blue:#4d9fff;--purple:#a78bfa;--orange:#ff9f43;--red:#ff5f5f;--cyan:#22d3ee;--pink:#ec4899;--green:#22c55e}
@@ -3583,6 +3584,9 @@ function Icon(props){
         case 'file':
             children=[React.createElement('path',Object.assign({key:'p1',d:'M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z'},common)),React.createElement('polyline',Object.assign({key:'p2',points:'14 3 14 8 19 8'},common))];
             break;
+        case 'file-pdf':
+            children=[React.createElement('path',Object.assign({key:'p1',d:'M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z'},common)),React.createElement('polyline',Object.assign({key:'p2',points:'14 3 14 8 19 8'},common)),React.createElement('path',Object.assign({key:'p3',d:'M8 13h8M8 17h5'},common))];
+            break;
         case 'layers':
             children=[React.createElement('polygon',Object.assign({key:'p1',points:'12 3 3 8 12 13 21 8 12 3'},common)),React.createElement('polyline',Object.assign({key:'p2',points:'3 12 12 17 21 12'},common)),React.createElement('polyline',Object.assign({key:'p3',points:'3 16 12 21 21 16'},common))];
             break;
@@ -5526,17 +5530,109 @@ function App(){
     function zoomIn(){if(zoomRef.current&&svgRef.current)d3.select(svgRef.current).transition().duration(200).call(zoomRef.current.scaleBy,1.4);}
     function zoomOut(){if(zoomRef.current&&svgRef.current)d3.select(svgRef.current).transition().duration(200).call(zoomRef.current.scaleBy,0.7);}
     function resetZoom(){if(zoomRef.current&&svgRef.current)d3.select(svgRef.current).transition().duration(300).call(zoomRef.current.transform,d3.zoomIdentity);}
-    function fitView(){
-        if(!zoomRef.current||!svgRef.current||!simRef.current)return;
+    function computeGraphFitTransform(paddingSlack){
+        paddingSlack=paddingSlack==null?100:paddingSlack;
+        if(!zoomRef.current||!svgRef.current||!simRef.current)return null;
         var nodes=simRef.current.nodes();
-        if(!nodes.length)return;
+        if(!nodes.length)return null;
         var xs=nodes.map(function(n){return n.x;}),ys=nodes.map(function(n){return n.y;});
         var minX=Math.min.apply(null,xs),maxX=Math.max.apply(null,xs),minY=Math.min.apply(null,ys),maxY=Math.max.apply(null,ys);
         var w=svgRef.current.clientWidth,h=svgRef.current.clientHeight;
-        var scale=0.8/Math.max((maxX-minX+100)/w,(maxY-minY+100)/h);
-        d3.select(svgRef.current).transition().duration(400).call(zoomRef.current.transform,d3.zoomIdentity.translate(w/2-scale*(minX+maxX)/2,h/2-scale*(minY+maxY)/2).scale(Math.min(scale,2)));
+        if(w<1||h<1)return null;
+        var scale=0.8/Math.max((maxX-minX+paddingSlack)/w,(maxY-minY+paddingSlack)/h);
+        return d3.zoomIdentity.translate(w/2-scale*(minX+maxX)/2,h/2-scale*(minY+maxY)/2).scale(Math.min(scale,2));
     }
-    function exportSVG(){if(!svgRef.current)return;var svgClone=svgRef.current.cloneNode(true);svgClone.setAttribute('xmlns','http://www.w3.org/2000/svg');svgClone.setAttribute('width',svgRef.current.clientWidth);svgClone.setAttribute('height',svgRef.current.clientHeight);var style=document.createElementNS('http://www.w3.org/2000/svg','style');style.textContent='text{font-family:JetBrains Mono,monospace;pointer-events:none}';svgClone.insertBefore(style,svgClone.firstChild);var blob=new Blob([new XMLSerializer().serializeToString(svgClone)],{type:'image/svg+xml'});var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download='codeflow-'+Date.now()+'.svg';a.click();URL.revokeObjectURL(url);}
+    function fitView(){
+        var t=computeGraphFitTransform(100);
+        if(!t)return;
+        d3.select(svgRef.current).transition().duration(400).call(zoomRef.current.transform,t);
+    }
+    function getEmbeddedSvgStyle(){
+        var vars=['--bg0','--bg1','--bg2','--bg3','--bg4','--hover','--border','--border2','--t0','--t1','--t2','--t3','--acc','--acc2','--accbg','--blue','--purple','--orange','--red','--cyan','--pink','--green'];
+        var computed=getComputedStyle(document.documentElement);
+        var root=':root{';
+        vars.forEach(function(name){var value=computed.getPropertyValue(name);if(value)root+=name+':'+value.trim()+';';});
+        root+='}';
+        return root+'text{font-family:JetBrains Mono,monospace;pointer-events:none}';
+    }
+    function exportSVG(){if(!svgRef.current)return;var svgClone=svgRef.current.cloneNode(true);svgClone.setAttribute('xmlns','http://www.w3.org/2000/svg');svgClone.setAttribute('width',svgRef.current.clientWidth);svgClone.setAttribute('height',svgRef.current.clientHeight);var style=document.createElementNS('http://www.w3.org/2000/svg','style');style.textContent=getEmbeddedSvgStyle();svgClone.insertBefore(style,svgClone.firstChild);var blob=new Blob([new XMLSerializer().serializeToString(svgClone)],{type:'image/svg+xml'});var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download='codeflow-'+Date.now()+'.svg';a.click();URL.revokeObjectURL(url);}
+    function graphSvgToPngDataUrlForPdf(scale,done){
+        scale=scale||2;
+        if(!svgRef.current){done('No graph to export');return;}
+        var svgEl=svgRef.current;
+        var w=svgEl.clientWidth,h=svgEl.clientHeight;
+        if(w<1||h<1){done('Graph has zero size');return;}
+        var svgClone=svgEl.cloneNode(true);
+        svgClone.setAttribute('xmlns','http://www.w3.org/2000/svg');
+        svgClone.setAttribute('width',String(w));
+        svgClone.setAttribute('height',String(h));
+        var styleEl=document.createElementNS('http://www.w3.org/2000/svg','style');
+        styleEl.textContent=getEmbeddedSvgStyle();
+        svgClone.insertBefore(styleEl,svgClone.firstChild);
+        var svgStr=new XMLSerializer().serializeToString(svgClone);
+        var blob=new Blob([svgStr],{type:'image/svg+xml;charset=utf-8'});
+        var url=URL.createObjectURL(blob);
+        var img=new Image();
+        img.onload=function(){
+            try{
+                var cw=Math.floor(w*scale),ch=Math.floor(h*scale);
+                var canvas=document.createElement('canvas');
+                canvas.width=cw;
+                canvas.height=ch;
+                var ctx=canvas.getContext('2d');
+                ctx.fillStyle=document.documentElement.classList.contains('light')?'#ffffff':'#0a0a0c';
+                ctx.fillRect(0,0,cw,ch);
+                ctx.drawImage(img,0,0,cw,ch);
+                URL.revokeObjectURL(url);
+                var dataUrl=canvas.toDataURL('image/png');
+                done(null,dataUrl,w,h);
+            }catch(ex){
+                URL.revokeObjectURL(url);
+                done(ex.message||'Raster failed');
+            }
+        };
+        img.onerror=function(){
+            URL.revokeObjectURL(url);
+            done('Could not rasterize graph for PDF');
+        };
+        img.src=url;
+    }
+    function exportPDF(){
+        if(graphConfig.vizType!=='graph'||!svgRef.current){showNotification('Switch to Graph view to export PDF.','error');return;}
+        if(typeof window.jspdf==='undefined'||!window.jspdf.jsPDF){showNotification('PDF library failed to load. Check your connection.','error');return;}
+        var svgNode=svgRef.current;
+        var prevTransform=d3.zoomTransform(svgNode);
+        var fitT=computeGraphFitTransform(160);
+        if(fitT)d3.select(svgNode).call(zoomRef.current.transform,fitT);
+        requestAnimationFrame(function(){
+            graphSvgToPngDataUrlForPdf(2,function(err,dataUrl,w,h){
+                d3.select(svgNode).call(zoomRef.current.transform,prevTransform);
+                if(err){showNotification(err,'error');return;}
+                try{
+                    var JsPDF=window.jspdf.jsPDF;
+                    var aspect=w/h;
+                    var orientation=aspect>=1?'l':'p';
+                    var doc=new JsPDF({unit:'pt',format:'a4',orientation:orientation});
+                    var pageW=doc.internal.pageSize.getWidth();
+                    var pageH=doc.internal.pageSize.getHeight();
+                    var margin=36;
+                    var maxW=pageW-2*margin;
+                    var maxH=pageH-2*margin;
+                    var imgW=w;
+                    var imgH=h;
+                    var fitScale=Math.min(maxW/imgW,maxH/imgH);
+                    var drawW=imgW*fitScale;
+                    var drawH=imgH*fitScale;
+                    var x=margin+(maxW-drawW)/2;
+                    var y=margin+(maxH-drawH)/2;
+                    doc.addImage(dataUrl,'PNG',x,y,drawW,drawH);
+                    doc.save('codeflow-'+Date.now()+'.pdf');
+                }catch(ex){
+                    showNotification(ex.message||'PDF export failed','error');
+                }
+            });
+        });
+    }
     function exportJSON(){if(!data)return;var blob=new Blob([JSON.stringify({stats:data.stats,files:data.files.map(function(f){return{path:f.path,fns:f.functions.length,layer:f.layer,lines:f.lines,dependencies:f.dependencies||[]};}),connections:data.connections,issues:data.issues,patterns:data.patterns,security:data.securityIssues},null,2)],{type:'application/json'});var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download='codeflow-analysis.json';a.click();}
     function getAnalysisSourceLabel(){
         if(localSourceKind==='folder')return'Local Folder';
@@ -6362,6 +6458,7 @@ function App(){
                     React.createElement('div',{style:{fontSize:10,fontWeight:600,color:'var(--t3)',textTransform:'uppercase',marginBottom:8}},'Visualization'),
                     React.createElement('div',{className:'export-options'},
                         React.createElement('div',{className:'export-option',onClick:function(){exportSVG();setShowExport(false);}},React.createElement('div',{className:'export-option-icon'},React.createElement(Icon,{name:'image',size:'xl'})),React.createElement('div',{className:'export-option-label'},'SVG Image')),
+                        React.createElement('div',{className:'export-option',onClick:function(){exportPDF();setShowExport(false);}},React.createElement('div',{className:'export-option-icon'},React.createElement(Icon,{name:'file-pdf',size:'xl'})),React.createElement('div',{className:'export-option-label'},'PDF Document')),
                         React.createElement('div',{className:'export-option',onClick:function(){copyLink();setShowExport(false);}},React.createElement('div',{className:'export-option-icon'},React.createElement(Icon,{name:'link',size:'xl'})),React.createElement('div',{className:'export-option-label'},'Share Link'))
                     ),
                     React.createElement('div',{style:{fontSize:10,fontWeight:600,color:'var(--t3)',textTransform:'uppercase',marginBottom:8,marginTop:16}},'Analysis Report'),
