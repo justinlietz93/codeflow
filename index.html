@@ -27,6 +27,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg==" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/web-tree-sitter@0.20.8/tree-sitter.js" integrity="sha512-HHbWn9jEdYHHREfFtaPv+eEgSfUSWj/IMe8cOuGAaQNnr9NQiD5ihxOkj1IFu3YGYHB8DHyHfxqxI7kI0b4g5A==" crossorigin="anonymous"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" integrity="sha512-qZvrmS2ekKPF2mSznTQsxqPgnpkI4DNTlrdUmTzrDgektczlKNRRhy5X5AAOnx5S09ydFYWWNSfcEqDTTHgtNA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.1/mermaid.min.js" crossorigin="anonymous"></script>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
     <style>
 :root{--bg0:#0a0a0c;--bg1:#0f0f12;--bg2:#161619;--bg3:#1c1c21;--bg4:#252529;--hover:#2a2a30;--border:#2d2d35;--border2:#222228;--t0:#f0f0f2;--t1:#c8c8cd;--t2:#8b8b95;--t3:#5c5c66;--acc:#00ff9d;--acc2:#00cc7d;--accbg:rgba(0,255,157,0.08);--blue:#4d9fff;--purple:#a78bfa;--orange:#ff9f43;--red:#ff5f5f;--cyan:#22d3ee;--pink:#ec4899;--green:#22c55e}
@@ -348,6 +349,19 @@ body{font-family:'JetBrains Mono',monospace;background:var(--bg0);color:var(--t0
 .matrix-label-col{font-size:8px;color:var(--t2);padding:4px 4px;width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .heatmap-legend{position:absolute;bottom:60px;right:20px;background:var(--bg1);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:9px}
 .heatmap-gradient{width:100px;height:8px;border-radius:4px;margin:6px 0;background:linear-gradient(90deg,var(--bg3),var(--acc))}
+.architecture-view{width:100%;height:100%;overflow:auto;padding:16px 24px 24px;background:var(--bg0)}
+.architecture-shell{min-width:900px;min-height:600px;background:var(--bg1);border:1px solid var(--border);border-radius:12px;padding:24px}
+.architecture-summary-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.architecture-chip{padding:6px 10px;background:var(--bg0);border:1px solid var(--border);border-radius:6px;font-size:10px;color:var(--t2)}
+.architecture-chip strong{color:var(--acc)}
+.mermaid-render{width:100%;height:calc(100vh - 210px);min-height:540px;position:relative;overflow:hidden;background:var(--bg0);border:1px solid var(--border2);border-radius:8px;cursor:grab;touch-action:none}
+.mermaid-render.dragging{cursor:grabbing}
+.architecture-pan{position:absolute;left:0;top:0;display:block;transform-origin:0 0;will-change:transform}
+.architecture-pan svg{display:block;max-width:none;overflow:visible}
+.architecture-source{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t1);background:var(--bg0);border:1px solid var(--border);border-radius:8px;padding:12px;white-space:pre;overflow:auto}
+.architecture-list{display:flex;flex-direction:column;gap:6px}
+.architecture-list-item{display:flex;align-items:center;gap:8px;font-size:10px;color:var(--t2);min-width:0}
+.architecture-list-item span:last-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pr-impact-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .pr-impact-card{background:var(--bg0);border:1px solid var(--border);border-radius:10px;padding:14px;overflow:hidden}
 .pr-impact-card-title{font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;margin-bottom:12px;display:flex;align-items:center;gap:6px}
@@ -579,6 +593,8 @@ body{height:100dvh;min-height:100dvh}
 .canvas-toolbar{top:auto;bottom:72px;left:10px;right:auto;gap:6px;overflow-x:visible;padding:4px;background:var(--bg1);border:1px solid var(--border);border-radius:10px}
 .tool-btn{width:38px;height:38px;font-size:14px;flex:0 0 auto}
 .graph-config{top:52px;left:10px;right:10px;width:auto;max-width:none}
+.architecture-view{padding:10px}
+.architecture-shell{min-width:760px;padding:16px}
 .legend{top:auto;bottom:72px;right:10px;max-width:calc(100vw - 20px)}
 .canvas-info{left:10px;right:10px;bottom:10px;overflow-x:auto;padding-bottom:0}
 .info-chip{white-space:nowrap;flex:0 0 auto}
@@ -3075,6 +3091,1366 @@ function buildTree(files){
 
 function countFiles(n){return n.files.length+Object.values(n.children).reduce(function(s,c){return s+countFiles(c);},0);}
 
+var ARCHITECTURE_MAX_BLOCKS=64;
+var ARCHITECTURE_MAX_RENDERED_DEPENDENCIES=48;
+var ARCHITECTURE_GROUP_ORDER_CODEFLOW=['Browser App','GitHub Action','Analysis Core','Repository Collection','Rendering / Reports','Testing','Fixtures / Examples','Application','Storage'];
+var ARCHITECTURE_GROUP_ORDER_WEBAPP=['App Entry / Shell','Frontend Routes / Views','Frontend Components','Backend / API Layer','Services / Business Logic','Data / Storage','Shared / Utilities','Configuration','Content / Data','External Integrations','Build Output','Testing','Fixtures / Examples'];
+var ARCHITECTURE_GROUP_ORDER_GENERIC=['Application','Shared Services / Utils','Configuration','Content / Data','Build Output','Testing','Fixtures / Examples','Storage'];
+
+function getArchitectureGroupOrder(profile){
+    if(profile==='codeflow')return ARCHITECTURE_GROUP_ORDER_CODEFLOW;
+    if(profile==='web-app')return ARCHITECTURE_GROUP_ORDER_WEBAPP;
+    return ARCHITECTURE_GROUP_ORDER_GENERIC;
+}
+
+function detectArchitectureProfile(files,framework){
+    var paths=(files||[]).map(function(f){return normalizeArchitecturePath(f.path||f.name).toLowerCase();});
+    if(paths.some(function(p){return /(^|\/)index\.html?$/i.test(p);})&&paths.some(function(p){return /(^|\/)card\/(lib|render)\//i.test(p);}))return'codeflow';
+    if(framework==='Next.js')return'web-app';
+    if(paths.some(function(p){
+        return /(^|\/)src\/app\//i.test(p)||/(^|\/)pages\//i.test(p)||/(^|\/)(backend|server|api|services?|middleware|routes?|platforms?)\b/i.test(p);
+    }))return'web-app';
+    if(framework==='Browser App')return'web-app';
+    return'generic';
+}
+
+function isArchitectureBuildOutput(path,name){
+    var p=String(path||'').toLowerCase().replace(/\\/g,'/');
+    var base=String(name||p.split('/').pop()||'').toLowerCase();
+    if(/(^|\/)out(\/|$)/.test(p)||/(^|\/)dist(\/|$)/.test(p)||/(^|\/)build(\/|$)/.test(p)||/(^|\/)coverage(\/|$)/.test(p))return true;
+    if(/(^|\/)\.next(\/|$)/.test(p)||/(^|\/)\.nuxt(\/|$)/.test(p)||/(^|\/)\.output(\/|$)/.test(p))return true;
+    if(/^page-[a-f0-9]{6,}/i.test(base)||/^layout-[a-f0-9]{6,}/i.test(base))return true;
+    if(/\/page-[a-f0-9]{6,}\//i.test(p)||/\/layout-[a-f0-9]{6,}\//i.test(p))return true;
+    if(/(^|\/)404\/index\.html?$/i.test(p)&&/(^|\/)out\//i.test(p))return true;
+    return false;
+}
+
+function isArchitectureTestFile(path){
+    var p=String(path||'').toLowerCase().replace(/\\/g,'/');
+    return /(^|\/)tests?\//.test(p)||/(^|\/)__tests__(\/|$)/.test(p)||/\.test\.(js|jsx|ts|tsx|mjs|cjs)$/.test(p)||/\.spec\.(js|jsx|ts|tsx|mjs|cjs)$/.test(p)||/\.smoke\.(js|mjs|cjs)$/.test(p);
+}
+
+function isArchitectureFixtureFile(path){
+    var p=String(path||'').toLowerCase().replace(/\\/g,'/');
+    return /(^|\/)fixtures(\/|$)/.test(p)||/(^|\/)__fixtures__(\/|$)/.test(p);
+}
+
+function isArchitectureBarrelIndex(path){
+    var p=normalizeArchitecturePath(path).toLowerCase();
+    return /\/index\.(js|mjs|cjs|ts)$/i.test(p)&&!/\/index\.(tsx|jsx)$/i.test(p);
+}
+
+function isNonRouteFolderSegment(segment){
+    return ['hooks','components','ui','views','schemas','schema','controllers','middleware','services','routes','utils','lib','common','analytics','types','constants','validators','models','repositories','config','core','api','server','backend','workers','functions','platforms','tabs','charts','widgets','providers','layouts','shared','domain','usecases','processors','jobs','db','database','content','posts','blog','docs','tests','fixtures','node_modules','public','static','assets','styles','themes'].indexOf(segment)>=0;
+}
+
+function isArchitectureBackendPath(path){
+    var p=normalizeArchitecturePath(path).toLowerCase();
+    if(/(^|\/)(a-)?backend(\/|$)/.test(p))return true;
+    if(/(^|\/)server(\/|$)/.test(p))return true;
+    if(/(^|\/)workers?(\/|$)/.test(p))return true;
+    if(/(^|\/)functions(\/|$)/.test(p))return true;
+    if(/(^|\/)lambda(\/|$)/.test(p))return true;
+    if(/^src\/app\/api\//.test(p))return false;
+    var segments=p.split('/').filter(Boolean);
+    for(var i=0;i<segments.length;i++){
+        var seg=segments[i];
+        if(seg==='middleware'||seg==='controllers'||seg==='handlers')return true;
+        if(seg==='routes'||seg==='services'){
+            if(i===0)return true;
+            var prev=segments[i-1];
+            if(prev==='backend'||prev==='a-backend'||prev==='server'||prev==='api')return true;
+        }
+    }
+    return false;
+}
+
+function canBeFrontendRoute(path){
+    var p=normalizeArchitecturePath(path).toLowerCase();
+    if(isArchitectureBuildOutput(path)||isArchitectureBackendPath(path)||isArchitectureBarrelIndex(path))return false;
+    if(/(^|\/)src\/app\/.*\/page\.(jsx|tsx)$/i.test(p))return true;
+    if(/^src\/app\/page\.(jsx|tsx)$/i.test(p))return true;
+    if(/^src\/site-pages\/.+\/index\.(tsx|jsx)$/i.test(p))return true;
+    if(/(^|\/)pages\/.*\.(jsx|tsx)$/i.test(p)&&!/(^|\/)pages\/api\//i.test(p))return true;
+    var flat=p.match(/^([a-z0-9][a-z0-9_-]*(?:\/[a-z0-9][a-z0-9_-]*){0,4})\/index\.(tsx|jsx)$/);
+    if(flat){
+        var segments=flat[1].split('/').filter(Boolean);
+        if(!segments.some(isNonRouteFolderSegment))return true;
+    }
+    return false;
+}
+
+function isArchitectureFrontendPath(path){
+    var p=normalizeArchitecturePath(path).toLowerCase();
+    if(isArchitectureBuildOutput(path)||isArchitectureBackendPath(path))return false;
+    if(/(^|\/)src\/app\//i.test(p)||/(^|\/)src\/site-pages\//i.test(p))return true;
+    if(/(^|\/)pages\//i.test(p)&&/\.(jsx|tsx)$/i.test(p))return true;
+    if(/(^|\/)(components|ui|views|widgets)\//i.test(p)&&/\.(jsx|tsx)$/i.test(p))return true;
+    if(canBeFrontendRoute(path))return true;
+    return false;
+}
+
+function inferNextSpecialFile(path){
+    var p=normalizeArchitecturePath(path).toLowerCase();
+    if(/\/global-error\.(tsx|jsx)$/.test(p))return{role:'frontend-component',title:'Global Error Boundary',route:null,kind:'component'};
+    if(/\/not-found\.(tsx|jsx)$/.test(p))return{role:'frontend-route',title:'404 Not Found',route:'/404',kind:'page'};
+    if(/\/error\.(tsx|jsx)$/.test(p))return{role:'frontend-component',title:'Error Boundary',route:null,kind:'component'};
+    if(/\/loading\.(tsx|jsx)$/.test(p))return{role:'frontend-component',title:'Loading UI',route:null,kind:'component'};
+    if(/\/template\.(tsx|jsx)$/.test(p))return{role:'app-shell',title:'App Template',route:null,kind:'shell'};
+    if(/\/layout\.(tsx|jsx)$/.test(p))return{role:'app-shell',title:'App Layout',route:null,kind:'shell'};
+    if(/\/providers\.(tsx|jsx)$/.test(p))return{role:'app-shell',title:'App Providers',route:null,kind:'shell'};
+    return null;
+}
+
+function isArchitectureConfigPath(path,name){
+    var p=normalizeArchitecturePath(path).toLowerCase();
+    var base=String(name||'').toLowerCase();
+    return /(^|\/)config(\/|$)/i.test(p)||/\.config\.(js|ts|mjs|cjs)$/.test(p)||base==='package.json'||base==='wrangler.toml'||base==='tsconfig.json';
+}
+
+function isArchitectureContentPath(path,name){
+    var p=normalizeArchitecturePath(path).toLowerCase();
+    return /(^|\/)(blog|posts|content|data|static\/content)\b/i.test(p)||/\.(md|mdx)$/i.test(name||'');
+}
+
+function isLikelyUiComponentSource(content){
+    return /(from\s+['"`]react['"`]|React\.)/.test(content||'')&&(/export\s+(?:default\s+)?function\s+[A-Z]/.test(content||'')||/export\s+(?:default\s+)?(?:const|class)\s+[A-Z]/.test(content||'')||/<[A-Z][A-Za-z0-9_]*\b/.test(content||''));
+}
+
+function inferWebAppRoute(path){
+    if(!canBeFrontendRoute(path))return null;
+    var p=normalizeArchitecturePath(path);
+    var nextRoute=inferArchitectureRoute(p);
+    if(nextRoute&&!isArchitectureBackendPath(path))return nextRoute;
+    var match=p.match(/^(?:src\/)?site-pages\/(.+)\/index\.(tsx|jsx)$/i);
+    if(match)return normalizeArchitectureRoute('/'+match[1].split('/').filter(Boolean).join('/'));
+    match=p.match(/^([a-z0-9][a-z0-9_-]*(?:\/[a-z0-9][a-z0-9_-]*){0,4})\/index\.(tsx|jsx)$/i);
+    if(match&&!isNonRouteFolderSegment(match[1].split('/')[0])){
+        var segments=match[1].split('/').filter(Boolean);
+        if(!segments.some(isNonRouteFolderSegment))return normalizeArchitectureRoute('/'+segments.join('/'));
+    }
+    return null;
+}
+
+function inferCodeflowArchitectureRole(path){
+    var p=normalizeArchitecturePath(path).toLowerCase();
+    if(isArchitectureTestFile(path))return'test';
+    if(isArchitectureFixtureFile(path))return'fixture';
+    if(/(^|\/)index\.html?$/i.test(p))return'browser-shell';
+    if(/(^|\/)card\/index\.(js|mjs|cjs)$/i.test(p))return'action-entry';
+    if(/\/analyzer\.(js|mjs|cjs)$/i.test(p))return'analyzer-loader';
+    if(/\/collect\.(js|mjs|cjs)$/i.test(p))return'collector';
+    if(/\/git\.(js|mjs|cjs)$/i.test(p))return'git';
+    if(/\/inputs\.(js|mjs|cjs)$/i.test(p))return'inputs';
+    if(/\/pr\.(js|mjs|cjs)$/i.test(p))return'pr';
+    if(/\/state\.(js|mjs|cjs)$/i.test(p))return'state';
+    if(/\/card\/render\/card\.(js|mjs|cjs)$/i.test(p))return'renderer';
+    if(/(^|\/)card\/render\//i.test(p))return'render-support';
+    if(/(^|\/)card\/lib\//i.test(p))return'module';
+    return'module';
+}
+
+function inferWebAppArchitectureRole(path,classified,content){
+    var p=normalizeArchitecturePath(path).toLowerCase();
+    var base=architectureFileBaseName(path);
+    var special=inferNextSpecialFile(path);
+    if(special)return special.role;
+    if(isArchitectureTestFile(path))return'test';
+    if(isArchitectureFixtureFile(path))return'fixture';
+    if(isArchitectureBuildOutput(path))return'build-output';
+    if(isArchitectureBackendPath(path)){
+        if(/\/middleware(\/|$)/.test(p)||base.toLowerCase()==='middleware')return'backend-middleware';
+        if(/\/routes(\/|$)/.test(p)||base.toLowerCase()==='routes')return'backend-routes';
+        if(/\/services(\/|$)/.test(p)||base.toLowerCase()==='services'||base.toLowerCase()==='service')return'backend-services';
+        if(/\/config(\/|$)/.test(p)||base.toLowerCase()==='config')return'config';
+        if(/\/core(\/|$)/.test(p)||base.toLowerCase()==='core')return'config';
+        if(/\/platforms\/[^/]+\//.test(p)&&(/analyzer|controller|api/.test(p)||/analyzer|controller/i.test(base)))return'platform-analyzer';
+        if(/\/analyzer/.test(p)||/analyzer/i.test(base))return'platform-analyzer';
+        if(/api[-_]?client/i.test(p)||/api[-_]?client/i.test(base))return'api-client';
+        return'backend-module';
+    }
+    if(isArchitectureConfigPath(path,base))return'config';
+    if(isArchitectureContentPath(path,base))return'content';
+    if(/(^|\/)src\/app\/(layout|template|providers|page)\./i.test(p))return'app-shell';
+    if(classified.kind==='api'||/^src\/app\/api\//.test(p))return'backend-routes';
+    if(classified.kind==='page'&&classified.route&&canBeFrontendRoute(path))return'frontend-route';
+    if(/\/hooks(\/|$)/.test(p)||/\/schemas?(\/|$)/.test(p)||/\/validators?(\/|$)/.test(p))return'shared-module';
+    if(/\/components(\/|$)/.test(p)||/\/ui\/components(\/|$)/.test(p)||/\/views(\/|$)/.test(p)){
+        if(/\.(tsx|jsx)$/i.test(p)&&isLikelyUiComponentSource(content))return'frontend-component';
+        return'shared-module';
+    }
+    if((classified.kind==='component'||classified.kind==='hook')&&/\.(tsx|jsx)$/i.test(p)&&isLikelyUiComponentSource(content))return'frontend-component';
+    if(/(^|\/)utils?\b/i.test(p)||/(^|\/)lib\//i.test(p)||/(^|\/)common\//i.test(p)||/(^|\/)constants?\b/i.test(p))return'shared-module';
+    return'shared-module';
+}
+
+function inferArchitectureRole(path,profile,classified,content){
+    if(profile==='codeflow')return inferCodeflowArchitectureRole(path);
+    return inferWebAppArchitectureRole(path,classified||{kind:'utility',route:null},content||'');
+}
+
+function inferArchitectureGroup(role,fact,profile){
+    if(profile==='codeflow'){
+        if(role==='browser-shell')return'Browser App';
+        if(role==='action-entry')return'GitHub Action';
+        if(role==='analyzer-loader'||role==='state')return'Analysis Core';
+        if(role==='collector'||role==='git'||role==='inputs'||role==='pr')return'Repository Collection';
+        if(role==='renderer'||role==='render-support')return'Rendering / Reports';
+        if(role==='test')return'Testing';
+        if(role==='fixture')return'Fixtures / Examples';
+        if(fact&&fact.kind==='page')return'Browser App';
+        if(fact&&fact.kind==='api')return'Application';
+        if(fact&&(fact.kind==='database-adapter'||fact.kind==='database'))return'Storage';
+        return'Application';
+    }
+    if(role==='app-shell')return'App Entry / Shell';
+    if(role==='frontend-route')return'Frontend Routes / Views';
+    if(role==='frontend-component')return'Frontend Components';
+    if(role==='platform-analyzer')return'Services / Business Logic';
+    if(role==='backend-routes'||role==='backend-middleware'||role==='api-client')return'Backend / API Layer';
+    if(role==='backend-services'||role==='backend-module')return'Services / Business Logic';
+    if(role==='config')return'Configuration';
+    if(role==='content')return'Content / Data';
+    if(role==='build-output')return'Build Output';
+    if(role==='test')return'Testing';
+    if(role==='fixture')return'Fixtures / Examples';
+    if(role==='shared-module')return'Shared / Utilities';
+    if(fact&&(fact.kind==='database-adapter'||fact.kind==='database'))return'Data / Storage';
+    return'Shared / Utilities';
+}
+
+function isArchitectureSignificantFile(path,role,fact,framework,profile,importedByCore){
+    if(isArchitectureTestFile(path)||isArchitectureFixtureFile(path)||isArchitectureBuildOutput(path))return false;
+    if(profile==='codeflow'){
+        if(role==='browser-shell'||role==='action-entry')return true;
+        if(role==='analyzer-loader'||role==='collector'||role==='git'||role==='inputs'||role==='pr'||role==='state'||role==='renderer'||role==='render-support')return true;
+        if(/(^|\/)card\/(lib|render)\//i.test(path))return true;
+        if(fact.kind==='page'||fact.kind==='api')return true;
+        if(fact.kind==='database-adapter'&&fact.dbUsage)return true;
+        return false;
+    }
+    if(role==='app-shell')return true;
+    if(role==='frontend-route'&&fact.route&&canBeFrontendRoute(path))return true;
+    if(role==='frontend-component'&&/\.(tsx|jsx)$/i.test(path))return true;
+    if(role==='backend-routes'||role==='backend-middleware'||role==='backend-services'||role==='platform-analyzer'||role==='api-client')return true;
+    if(role==='config'||role==='content')return true;
+    if(role==='backend-module'&&/(middleware|routes?|services?|analyzer|platform)/i.test(path))return true;
+    if(fact.kind==='page'&&fact.route&&canBeFrontendRoute(path))return true;
+    if(fact.kind==='api')return true;
+    if(fact.kind==='database-adapter'&&fact.dbUsage)return true;
+    if(importedByCore)return true;
+    return false;
+}
+
+function extractExportedComponentName(content){
+    var match=(content||'').match(/export\s+default\s+function\s+([A-Z][A-Za-z0-9_]*)/);
+    if(match)return match[1];
+    match=(content||'').match(/export\s+default\s+(?:const|class)\s+([A-Z][A-Za-z0-9_]*)/);
+    if(match)return match[1];
+    match=(content||'').match(/export\s+function\s+([A-Z][A-Za-z0-9_]*)/);
+    if(match)return match[1];
+    return null;
+}
+
+function inferPageComponentTitle(path,route,content){
+    var special=inferNextSpecialFile(path);
+    if(special&&special.title)return special.title;
+    var exported=extractExportedComponentName(content);
+    if(exported)return exported;
+    var base=architectureFileBaseName(path);
+    if(/^[A-Z]/.test(base)&&base!=='Index'&&base!=='Page')return base;
+    if(route&&route!=='/'){
+        var segment=route.split('/').filter(Boolean).pop()||'';
+        if(segment)return segment.charAt(0).toUpperCase()+segment.slice(1).replace(/[-_](\w)/g,function(m,c){return c.toUpperCase();})+' Page';
+    }
+    if(/layout/i.test(base))return'App Layout';
+    if(/page/i.test(base))return'Page Module';
+    return'UI Module';
+}
+
+function testFileReferencesCore(content){
+    return /CODEFLOW_ANALYZER|buildAnalysisData|loadAnalyzer|locateIndexHtml|const Parser=\{/.test(content||'');
+}
+
+function inferTestTargetPaths(testPath){
+    var base=architectureFileBaseName(testPath).toLowerCase();
+    var targets=[];
+    if(/golden/.test(base))targets.push('card/lib/analyzer.js');
+    if(/repo-smoke|smoke/.test(base))targets.push('card/lib/collect.js');
+    if(/md-extractor|sync-with-html|html-inline/.test(base))targets.push('index.html');
+    return targets;
+}
+
+function architectureDependencyLabel(sourceRole,targetRole,importPath){
+    if(sourceRole==='test')return'tests';
+    if(sourceRole==='browser-shell'&&targetRole==='analyzer-loader')return'runs analysis';
+    if(sourceRole==='browser-shell'&&targetRole==='collector')return'loads repo data';
+    if(sourceRole==='action-entry'&&targetRole==='browser-shell')return'loads analyzer from';
+    if(sourceRole==='action-entry'&&targetRole==='collector')return'collects repo';
+    if(sourceRole==='action-entry'&&targetRole==='analyzer-loader')return'runs analysis';
+    if(sourceRole==='action-entry'&&targetRole==='state')return'stores derived state';
+    if(sourceRole==='action-entry'&&targetRole==='renderer')return'renders report';
+    if(sourceRole==='collector'&&targetRole==='git')return'uses GitHub API';
+    if(sourceRole==='collector'&&targetRole==='inputs')return'normalizes input';
+    if(sourceRole==='pr'&&targetRole==='git')return'analyzes pull requests';
+    if(sourceRole==='analyzer-loader'&&targetRole==='state')return'stores derived state';
+    if(sourceRole==='renderer'&&targetRole==='render-support')return'uses visual helpers';
+    if(sourceRole==='render-support'&&targetRole==='render-support'){
+        if(/receipt-md/.test(importPath||''))return'exports markdown';
+        if(/theme/.test(importPath||''))return'uses';
+        return'uses';
+    }
+    if(targetRole==='database')return'queries';
+    if(sourceRole==='browser-shell'&&targetRole==='api')return'calls';
+    if(sourceRole==='app-shell'&&targetRole==='frontend-route')return'bootstraps';
+    if(sourceRole==='frontend-route'&&targetRole==='frontend-component')return'renders';
+    if(sourceRole==='frontend-component'&&targetRole==='platform-analyzer')return'calls';
+    if(sourceRole==='frontend-component'&&targetRole==='backend-services')return'calls';
+    if(sourceRole==='backend-routes'&&targetRole==='backend-middleware')return'passes through';
+    if(sourceRole==='backend-routes'&&targetRole==='backend-services')return'dispatches';
+    if(sourceRole==='backend-services'&&targetRole==='platform-analyzer')return'uses';
+    if(sourceRole==='platform-analyzer'&&targetRole==='api-client')return'uses API';
+    if(sourceRole==='frontend-component'&&targetRole==='content')return'reads content';
+    if((sourceRole==='app-shell'||sourceRole==='backend-module')&&targetRole==='config')return'depends on';
+    return'depends on';
+}
+
+function normalizeArchitecturePath(value){
+    return (value||'').replace(/\\/g,'/').replace(/^\/+/,'').replace(/\/{2,}/g,'/');
+}
+
+function architectureDirname(path){
+    path=normalizeArchitecturePath(path);
+    return path.includes('/')?path.split('/').slice(0,-1).join('/'):'';
+}
+
+function stripArchitectureExt(path){
+    return normalizeArchitecturePath(path).replace(/\.(jsx?|tsx?|mjs|cjs|html?|css|scss|sass|less|py|pyw|pyi|rb|go|java|php|rs|cs|swift|kt|kts)$/i,'');
+}
+
+function architectureFileBaseName(path){
+    var base=stripArchitectureExt(path).split('/').pop()||'Block';
+    return base==='index'?(stripArchitectureExt(path).split('/').slice(-2,-1)[0]||base):base;
+}
+
+function normalizeArchitectureRoute(route){
+    route=String(route||'').split('#')[0].split('?')[0].trim();
+    if(!route)return'';
+    if(route[0]!=='/')route='/'+route;
+    route=route.replace(/\/{2,}/g,'/');
+    if(route.length>1)route=route.replace(/\/$/,'');
+    return route||'/';
+}
+
+function routeSegmentsMatch(patternRoute,targetRoute){
+    patternRoute=normalizeArchitectureRoute(patternRoute);
+    targetRoute=normalizeArchitectureRoute(targetRoute);
+    if(patternRoute===targetRoute)return true;
+    var pattern=patternRoute.split('/').filter(Boolean);
+    var target=targetRoute.split('/').filter(Boolean);
+    for(var i=0;i<pattern.length;i++){
+        var segment=pattern[i];
+        if(segment.charAt(0)===':'&&segment.endsWith('*'))return true;
+        if(i>=target.length)return false;
+        if(segment.charAt(0)===':')continue;
+        if(segment!==target[i])return false;
+    }
+    return pattern.length===target.length;
+}
+
+function getArchitectureScanFiles(files){
+    return (files||[]).filter(function(file){
+        var path=normalizeArchitecturePath(file.path||file.name);
+        return !isArchitectureTestFile(path)&&!isArchitectureFixtureFile(path);
+    });
+}
+
+function detectArchitectureFramework(files){
+    var paths=getArchitectureScanFiles(files).map(function(f){return normalizeArchitecturePath(f.path||f.name).toLowerCase();});
+    var hasNextConfig=paths.some(function(p){return /(^|\/)next\.config\.(js|mjs|ts|cjs)$/.test(p);});
+    var hasAppRouter=paths.some(function(p){return /(^|\/)(src\/)?app\/.*(page|route)\.(js|jsx|ts|tsx)$/.test(p);});
+    var hasPagesRouter=paths.some(function(p){return /(^|\/)(src\/)?pages\/.*\.(js|jsx|ts|tsx)$/.test(p);});
+    if(hasNextConfig||hasAppRouter||hasPagesRouter)return'Next.js';
+    if(paths.some(function(p){return /\.(html?|xhtml)$/.test(p);}))return'Browser App';
+    if(paths.some(function(p){return /\.(jsx?|tsx?|mjs|cjs)$/.test(p);}))return'JavaScript/TypeScript';
+    if(paths.some(function(p){return /\.(py|pyw|pyi)$/.test(p);}))return'Python';
+    return'Generic';
+}
+
+function convertNextRouteSegment(segment){
+    if(!segment||/^\(.*\)$/.test(segment))return null;
+    var optionalCatchAll=segment.match(/^\[\[\.\.\.(.+)\]\]$/);
+    if(optionalCatchAll)return':'+optionalCatchAll[1]+'*';
+    var catchAll=segment.match(/^\[\.\.\.(.+)\]$/);
+    if(catchAll)return':'+catchAll[1]+'*';
+    var dynamic=segment.match(/^\[(.+)\]$/);
+    if(dynamic)return':'+dynamic[1];
+    return segment;
+}
+
+function nextRouteFromSegments(segments){
+    var clean=[];
+    (segments||[]).forEach(function(segment){
+        var converted=convertNextRouteSegment(segment);
+        if(converted)clean.push(converted);
+    });
+    return normalizeArchitectureRoute('/'+clean.join('/'));
+}
+
+function inferArchitectureRoute(path){
+    var p=normalizeArchitecturePath(path);
+    var match;
+
+    match=p.match(/^(?:src\/)?app\/api\/(.+)\/route\.(js|jsx|ts|tsx)$/i);
+    if(match)return nextRouteFromSegments(['api'].concat(match[1].split('/')));
+
+    match=p.match(/^(?:src\/)?app\/api\/route\.(js|jsx|ts|tsx)$/i);
+    if(match)return'/api';
+
+    match=p.match(/^(?:src\/)?app\/(.+)\/page\.(js|jsx|ts|tsx)$/i);
+    if(match)return nextRouteFromSegments(match[1].split('/'));
+
+    match=p.match(/^(?:src\/)?app\/page\.(js|jsx|ts|tsx)$/i);
+    if(match)return'/';
+
+    match=p.match(/^(?:src\/)?pages\/api\/(.+)\.(js|jsx|ts|tsx)$/i);
+    if(match){
+        var apiParts=stripArchitectureExt(match[1]).split('/').filter(Boolean);
+        if(apiParts[apiParts.length-1]==='index')apiParts.pop();
+        return nextRouteFromSegments(['api'].concat(apiParts));
+    }
+
+    match=p.match(/^(?:src\/)?pages\/(.+)\.(js|jsx|ts|tsx)$/i);
+    if(match){
+        var routePath=stripArchitectureExt(match[1]);
+        var parts=routePath.split('/').filter(Boolean);
+        var first=parts[0]||'';
+        if(first.charAt(0)==='_')return null;
+        if(parts[parts.length-1]==='index')parts.pop();
+        return nextRouteFromSegments(parts);
+    }
+
+    return null;
+}
+
+function extractArchitectureImports(content){
+    var imports=[];
+    var regexes=[
+        /import\s+[\s\S]*?\s+from\s+['"`]([^'"`]+)['"`]/g,
+        /import\s*\(\s*['"`]([^'"`]+)['"`]\s*\)/g,
+        /require\s*\(\s*['"`]([^'"`]+)['"`]\s*\)/g
+    ];
+    regexes.forEach(function(regex){
+        var match;
+        while((match=regex.exec(content||'')))imports.push(match[1]);
+    });
+    return Array.from(new Set(imports));
+}
+
+function extractJsxComponents(content){
+    var components=[];
+    var ignored=new Set(['Fragment','React','Suspense','StrictMode']);
+    var regex=/<([A-Z][A-Za-z0-9_]*)\b/g;
+    var match;
+    while((match=regex.exec(content||''))){
+        if(!ignored.has(match[1]))components.push(match[1]);
+    }
+    return Array.from(new Set(components));
+}
+
+function extractNavigationLinks(content){
+    var links=[];
+    var regexes=[
+        /<Link[^>]+href=["'`]([^"'`]+)["'`]/g,
+        /<a[^>]+href=["'`]([^"'`]+)["'`]/g,
+        /router\.(?:push|replace)\s*\(\s*["'`]([^"'`]+)["'`]\s*\)/g,
+        /navigate\s*\(\s*["'`]([^"'`]+)["'`]\s*\)/g
+    ];
+    regexes.forEach(function(regex){
+        var match;
+        while((match=regex.exec(content||''))){
+            var route=normalizeArchitectureRoute(match[1]);
+            if(route&&route.charAt(0)==='/'&&!route.startsWith('/api'))links.push(route);
+        }
+    });
+    return Array.from(new Set(links));
+}
+
+function extractApiCalls(content){
+    var calls=[];
+    var match;
+    var fetchRegex=/fetch\s*\(\s*["'`]([^"'`]+)["'`](?:\s*,\s*\{([\s\S]{0,180}?)\})?/g;
+    while((match=fetchRegex.exec(content||''))){
+        var method='GET';
+        var methodMatch=(match[2]||'').match(/method\s*:\s*["'`]([A-Za-z]+)["'`]/);
+        if(methodMatch)method=methodMatch[1].toUpperCase();
+        calls.push({method:method,url:normalizeArchitectureRoute(match[1])});
+    }
+    var axiosRegex=/axios\.(get|post|put|patch|delete)\s*\(\s*["'`]([^"'`]+)["'`]/g;
+    while((match=axiosRegex.exec(content||''))){
+        calls.push({method:match[1].toUpperCase(),url:normalizeArchitectureRoute(match[2])});
+    }
+    return calls.filter(function(call){return call.url&&call.url.startsWith('/api');});
+}
+
+function detectDatabaseUsage(content){
+    return [
+        /\bnew\s+PrismaClient\s*\(/,
+        /\bprisma\.\w+\.(findMany|findUnique|findFirst|create|update|delete|upsert|count|aggregate)\s*\(/,
+        /\bsupabase\.from\s*\(/,
+        /\bmongoose\.model\b/,
+        /\bpool\.query\s*\(/,
+        /\bdb\.(select|insert|update|delete|query)\s*\(/,
+        /\bcollection\s*\(/
+    ].some(function(pattern){return pattern.test(content||'');});
+}
+
+function isLikelyReactComponentFile(path,content){
+    var p=normalizeArchitecturePath(path);
+    var base=architectureFileBaseName(p);
+    return /(^|\/)(components|ui)\//i.test(p)||
+        /^[A-Z]/.test(base)||
+        /\.(jsx|tsx)$/i.test(p)||
+        (/(from\s+['"`]react['"`]|React\.)/.test(content||'')&&/<[A-Z][A-Za-z0-9_]*\b/.test(content||''));
+}
+
+function classifyArchitectureFile(path,content){
+    var p=normalizeArchitecturePath(path);
+    var route=inferArchitectureRoute(p);
+    if(route){
+        return route.startsWith('/api')?{kind:'api',route:route}:{kind:'page',route:route};
+    }
+    var base=architectureFileBaseName(p);
+    var dbUsage=detectDatabaseUsage(content);
+    if(/^use[A-Z0-9_]/.test(base)||/(^|\/)hooks?\//i.test(p))return{kind:'hook',route:null};
+    if(dbUsage&&/(^|\/)(db|database|prisma|models?|schema|repositories?|data)\b/i.test(p))return{kind:'database-adapter',route:null};
+    if(/(^|\/)(services?|controllers?|server|actions)\//i.test(p))return{kind:'service',route:null};
+    if(isLikelyReactComponentFile(p,content))return{kind:'component',route:null};
+    if(dbUsage)return{kind:'database-adapter',route:null};
+    return{kind:'utility',route:null};
+}
+
+function inferGenericArchitectureRoute(path){
+    var p=normalizeArchitecturePath(path);
+    if(/(^|\/)index\.html?$/i.test(p))return'/';
+    if(/\.(html?|xhtml)$/i.test(p)){
+        return normalizeArchitectureRoute('/'+stripArchitectureExt(p).replace(/\/index$/i,''));
+    }
+    return null;
+}
+
+function classifyGenericArchitectureFile(file,content){
+    var p=normalizeArchitecturePath(file.path||file.name);
+    var name=file.name||p.split('/').pop()||'';
+    var layer=(file.layer||Parser.detectLayer(p)||'utils').toLowerCase();
+    var dbUsage=detectDatabaseUsage(content);
+    var route=inferGenericArchitectureRoute(p);
+
+    if(route||Parser.isHTML(name))return{kind:'page',route:route||'/'+stripArchitectureExt(name)};
+    if(dbUsage||layer==='data'||layer==='classes')return{kind:'database-adapter',route:null};
+    if(layer==='ui'||layer==='forms'||layer==='components')return{kind:'component',route:null};
+    if(layer==='services')return{kind:'service',route:null};
+    if(layer==='config')return{kind:'utility',route:null};
+    if(file.functions&&file.functions.length>0)return{kind:'module',route:null};
+    return{kind:'utility',route:null};
+}
+
+function extractArchitectureFacts(files,framework){
+    var profile=detectArchitectureProfile(files,framework);
+    var rawFacts=(files||[]).filter(function(file){
+        return file&&file.content&&Parser.isCode(file.name||file.path||'');
+    }).map(function(file){
+        var path=normalizeArchitecturePath(file.path||file.name);
+        var content=file.content||'';
+        if(isArchitectureBuildOutput(path,file.name)){
+            return{
+                path:path,
+                name:file.name||path.split('/').pop(),
+                kind:'build-output',
+                route:null,
+                role:'build-output',
+                group:'Build Output',
+                profile:profile,
+                isTest:false,
+                isFixture:false,
+                isBuildOutput:true,
+                isCore:false,
+                imports:[],
+                jsxComponents:[],
+                links:[],
+                apiCalls:[],
+                dbUsage:false,
+                content:content,
+                loc:file.lines||0
+            };
+        }
+        var special=inferNextSpecialFile(path);
+        var webRoute=canBeFrontendRoute(path)?inferWebAppRoute(path):null;
+        var classified=framework==='Next.js'
+            ? classifyArchitectureFile(path,content)
+            : classifyGenericArchitectureFile(file,content);
+        if(special){
+            classified={kind:special.kind,route:special.route};
+        }else if(webRoute&&profile!=='codeflow'&&!isArchitectureBackendPath(path)){
+            classified=classified.kind==='api'?classified:{kind:'page',route:webRoute};
+        }else if(isArchitectureBackendPath(path)||isArchitectureBarrelIndex(path)){
+            if(classified.kind==='page')classified={kind:'module',route:null};
+        }
+        var role=inferArchitectureRole(path,profile,classified,content);
+        if(special){
+            role=special.role;
+            if(special.route)classified.route=special.route;
+        }
+        if(role==='fixture')classified={kind:'fixture',route:null};
+        else if(role==='browser-shell')classified={kind:'shell',route:inferGenericArchitectureRoute(path)||'/'};
+        else if(role==='action-entry')classified={kind:'action-entry',route:null};
+        else if(role==='test')classified={kind:'test',route:null};
+        else if(role==='build-output')classified={kind:'build-output',route:null};
+        else if(role==='app-shell')classified={kind:'shell',route:null};
+        else if(role==='frontend-route')classified={kind:'page',route:classified.route||webRoute};
+        else if(role==='frontend-component')classified={kind:'component',route:classified.route||null};
+        else if(role==='backend-routes'||role==='backend-middleware'||role==='backend-services'||role==='backend-module'||role==='platform-analyzer'||role==='api-client'){
+            classified={kind:role==='platform-analyzer'?'service':'module',route:null};
+        }
+        var displayTitle=special?special.title:null;
+        if(!displayTitle&&role==='frontend-component')displayTitle=inferPageComponentTitle(path,classified.route,content);
+        return{
+            path:path,
+            name:file.name||path.split('/').pop(),
+            kind:classified.kind,
+            route:classified.route,
+            displayTitle:displayTitle,
+            role:role,
+            group:inferArchitectureGroup(role,{kind:classified.kind},profile),
+            profile:profile,
+            isTest:isArchitectureTestFile(path),
+            isFixture:isArchitectureFixtureFile(path),
+            isBuildOutput:isArchitectureBuildOutput(path,file.name),
+            isCore:false,
+            imports:extractArchitectureImports(content),
+            jsxComponents:extractJsxComponents(content),
+            links:extractNavigationLinks(content),
+            apiCalls:extractApiCalls(content),
+            dbUsage:detectDatabaseUsage(content),
+            content:content,
+            loc:file.lines||0
+        };
+    });
+    var corePaths=new Set();
+    rawFacts.forEach(function(fact){
+        if(fact.isBuildOutput||fact.isTest||fact.isFixture)return;
+        fact.isCore=isArchitectureSignificantFile(fact.path,fact.role,fact,framework,fact.profile,false);
+        if(fact.isCore)corePaths.add(fact.path);
+    });
+    rawFacts.forEach(function(fact){
+        if(fact.isCore)return;
+        if(fact.isBuildOutput||fact.isTest||fact.isFixture)return;
+        var importedByCore=fact.imports.some(function(importPath){
+            var resolved=resolveArchitectureImport(importPath,fact.path,files);
+            return resolved&&corePaths.has(resolved);
+        });
+        if(!importedByCore&&fact.role==='frontend-component'){
+            importedByCore=fact.imports.length>0||isArchitectureFrontendPath(fact.path);
+        }
+        if(importedByCore||isArchitectureSignificantFile(fact.path,fact.role,fact,framework,fact.profile,true)){
+            fact.isCore=true;
+            corePaths.add(fact.path);
+        }
+    });
+    return rawFacts;
+}
+
+function shouldShowArchitectureBlock(fact){
+    return ['page','api','component','hook','service','database-adapter','module','utility','shell','fixture','action-entry','test','build-output'].includes(fact.kind);
+}
+
+function architectureLayer(fact){
+    if(fact.kind==='page'||fact.kind==='component'||fact.kind==='hook')return'Frontend';
+    if(fact.kind==='api'||fact.kind==='service')return'Backend';
+    if(fact.kind==='database-adapter')return'Data Layer';
+    if(fact.kind==='database')return'Storage';
+    if(fact.kind==='module'||fact.kind==='utility')return'Shared';
+    return'Shared';
+}
+
+function architectureTitle(fact){
+    if(fact.displayTitle)return fact.displayTitle;
+    if(fact.role==='app-shell')return'App Entry / Shell';
+    if(fact.kind==='shell'||fact.role==='browser-shell')return'Browser App Shell';
+    if(fact.kind==='action-entry')return'GitHub Action';
+    if(fact.role==='frontend-route')return fact.route==='/'?'/':fact.route;
+    if(fact.role==='frontend-component')return inferPageComponentTitle(fact.path,fact.route,fact.content);
+    if(fact.role==='platform-analyzer'){
+        var seg=(fact.path.match(/\/(youtube|reddit|twitter|github|tiktok|instagram)\b/i)||[])[1];
+        if(seg)return seg.charAt(0).toUpperCase()+seg.slice(1)+' Analyzer';
+        return architectureFileBaseName(fact.path)+' Analyzer';
+    }
+    if(fact.role==='backend-middleware')return'Middleware';
+    if(fact.role==='backend-routes')return'API Routes';
+    if(fact.role==='backend-services')return'Services';
+    if(fact.role==='backend-module'){
+        var seg=normalizeArchitecturePath(fact.path).split('/').filter(Boolean);
+        var name=architectureFileBaseName(fact.path);
+        if(name&&name!=='index')return name.charAt(0).toUpperCase()+name.slice(1);
+        return seg.length?seg[seg.length-1].charAt(0).toUpperCase()+seg[seg.length-1].slice(1):'Backend Module';
+    }
+    if(fact.role==='api-client')return'API Clients';
+    if(fact.role==='config')return'Config';
+    if(fact.role==='content')return'Content';
+    if(fact.kind==='page')return fact.route==='/'?'Home Page':'Page '+fact.route;
+    if(fact.kind==='api')return'API '+fact.route;
+    if(fact.kind==='database')return'Database';
+    return architectureFileBaseName(fact.path);
+}
+
+function aggregateFrontendComponentKey(block){
+    var files=(block.files||[]).map(function(f){return normalizeArchitecturePath(f).toLowerCase();});
+    var sample=files[0]||'';
+    var platform=sample.match(/\/platforms\/([^/]+)\//);
+    if(platform){
+        var name=platform[1];
+        if(/\/tabs\/[^/]+\/insights\//.test(sample))return'agg:fe:'+name+'-insight-tabs';
+        if(/\/tabs\//.test(sample))return'agg:fe:'+name+'-tabs';
+        if(/\/components\/charts\//.test(sample)||/\/charts\//.test(sample))return'agg:fe:'+name+'-chart-components';
+        if(/\/views\//.test(sample)||/\/pages\//.test(sample))return'agg:fe:'+name+'-dashboard';
+        if(/\/components\//.test(sample))return'agg:fe:'+name+'-components';
+        return'agg:fe:'+name+'-feature-ui';
+    }
+    if(/\/components\/charts\//.test(sample)||/\/charts\//.test(sample))return'agg:fe:chart-components';
+    if(/\/components\//.test(sample)||/\/ui\/components\//.test(sample))return'agg:fe:shared-ui-components';
+    if(/\/hooks\//.test(sample))return'agg:fe:hooks';
+    if(/\/views\//.test(sample))return'agg:fe:views';
+    return'agg:fe:feature-components';
+}
+
+function getArchitectureAggregateKey(block,profile){
+    if(profile==='codeflow')return null;
+    if(block.isBuildOutput)return null;
+    if(block.role==='app-shell'||block.role==='browser-shell')return'agg:app-shell';
+    if(block.role==='frontend-route'&&block.route)return'agg:route:'+block.route;
+    if(block.role==='frontend-component')return aggregateFrontendComponentKey(block);
+    if(block.role==='platform-analyzer'){
+        var sample=String((block.files&&block.files[0])||'').toLowerCase();
+        var seg=sample.match(/\/platforms\/([^/]+)\//);
+        if(seg)return'agg:analyzer:'+seg[1];
+        seg=sample.match(/\/(youtube|reddit|twitter|github|tiktok|instagram)\b/);
+        return'agg:analyzer:'+(seg?seg[1]:block.title).toLowerCase();
+    }
+    if(block.role==='backend-middleware')return'agg:backend:middleware';
+    if(block.role==='backend-routes')return'agg:backend:routes';
+    if(block.role==='backend-services')return'agg:backend:services';
+    if(block.role==='api-client')return'agg:backend:api-client';
+    if(block.role==='backend-module'){
+        var sample=String((block.files&&block.files[0])||'').toLowerCase();
+        if(/\/config\//.test(sample))return'agg:backend:config';
+        if(/\/core\//.test(sample))return'agg:backend:core';
+        return'agg:backend:'+architectureFileBaseName((block.files&&block.files[0])||'module').toLowerCase();
+    }
+    if(block.role==='config')return'agg:config';
+    if(block.role==='content')return'agg:content';
+    if(block.group==='Shared / Utilities'||block.role==='shared-module'){
+        var sample=String((block.files&&block.files[0])||'').toLowerCase();
+        if(/\/hooks\//.test(sample))return'agg:shared:hooks';
+        if(/\/schemas?\//.test(sample))return'agg:shared:schema';
+        if(/\/utils?\//.test(sample))return'agg:shared:utils';
+        return'agg:shared:utilities';
+    }
+    return null;
+}
+
+function titleCaseSegment(value){
+    return String(value||'').split(/[-_]/).filter(Boolean).map(function(part){
+        return part.charAt(0).toUpperCase()+part.slice(1);
+    }).join(' ');
+}
+
+function resolveAggregateBlockTitle(key){
+    if(!key||!key.startsWith('agg:'))return null;
+    var known={
+        'agg:app-shell':'App Shell',
+        'agg:backend:middleware':'Middleware',
+        'agg:backend:routes':'API Routes',
+        'agg:backend:services':'Services',
+        'agg:backend:api-client':'API Clients',
+        'agg:backend:config':'Config',
+        'agg:backend:core':'Core',
+        'agg:config':'App Config',
+        'agg:content':'Content',
+        'agg:fe:chart-components':'Chart Components',
+        'agg:fe:shared-ui-components':'Shared UI Components',
+        'agg:fe:hooks':'Hooks',
+        'agg:fe:views':'Views',
+        'agg:fe:feature-components':'Feature Components',
+        'agg:shared:hooks':'Hooks',
+        'agg:shared:schema':'Schema',
+        'agg:shared:utils':'Utils',
+        'agg:shared:utilities':'Utilities'
+    };
+    if(known[key])return known[key];
+    var routeMatch=key.match(/^agg:route:(.+)$/);
+    if(routeMatch){
+        var route=normalizeArchitectureRoute(routeMatch[1]);
+        return route==='/'?'/':route;
+    }
+    var analyzerMatch=key.match(/^agg:analyzer:(.+)$/);
+    if(analyzerMatch)return titleCaseSegment(analyzerMatch[1])+' Analyzer';
+    var feMatch=key.match(/^agg:fe:([^-]+)-(.+)$/);
+    if(feMatch)return titleCaseSegment(feMatch[1])+' '+titleCaseSegment(feMatch[2].replace(/-/g,' '));
+    var backendMatch=key.match(/^agg:backend:(.+)$/);
+    if(backendMatch)return titleCaseSegment(backendMatch[1]);
+    return null;
+}
+
+function aggregateArchitectureBlocks(blocks,profile,warnings){
+    if(profile==='codeflow')return blocks;
+    var merged=Object.create(null);
+    var passthrough=[];
+    blocks.forEach(function(block){
+        var key=getArchitectureAggregateKey(block,profile);
+        if(!key){
+            passthrough.push(block);
+            return;
+        }
+        if(!merged[key]){
+            merged[key]=Object.assign({},block,{files:(block.files||[]).slice(),loc:block.loc||0});
+            merged[key].id=makeMermaidSafeId(key);
+            var aggregateTitle=resolveAggregateBlockTitle(key);
+            if(aggregateTitle)merged[key].title=aggregateTitle;
+        }else{
+            (block.files||[]).forEach(function(filePath){
+                if(merged[key].files.indexOf(filePath)<0)merged[key].files.push(filePath);
+            });
+            merged[key].loc=(merged[key].loc||0)+(block.loc||0);
+        }
+    });
+    var aggregated=Object.keys(merged).map(function(key){return merged[key];});
+    if(aggregated.length+passthrough.length<blocks.length){
+        warnings.push('Aggregated '+blocks.length+' architecture files into '+(aggregated.length+passthrough.length)+' diagram blocks for readability.');
+    }
+    return aggregated.concat(passthrough);
+}
+
+function computeArchitectureHiddenSummary(facts,blocks,includeTests,includeBuildOutput){
+    var shownPaths=new Set();
+    getVisibleArchitectureBlocks(blocks,includeTests,includeBuildOutput).forEach(function(block){
+        (block.files||[]).forEach(function(filePath){shownPaths.add(normalizeArchitecturePath(filePath));});
+    });
+    var hidden={build:0,tests:0,fixtures:0,lowSignal:0,total:0};
+    (facts||[]).forEach(function(fact){
+        if(shownPaths.has(fact.path))return;
+        if(fact.isBuildOutput){
+            hidden.build++;
+        }else if(fact.isTest){
+            hidden.tests++;
+        }else if(fact.isFixture){
+            hidden.fixtures++;
+        }else{
+            hidden.lowSignal++;
+        }
+        hidden.total++;
+    });
+    return hidden;
+}
+
+function makeMermaidSafeId(value){
+    var safe=String(value||'Block')
+        .replace(/[^a-zA-Z0-9_]/g,'_')
+        .replace(/^([0-9])/,'_$1')
+        .slice(0,80);
+    return safe||'Block';
+}
+
+function escapeMermaidLabel(value){
+    return String(value||'')
+        .replace(/"/g,"'")
+        .replace(/\|/g,'/')
+        .replace(/\n/g,' ')
+        .replace(/\r/g,' ')
+        .slice(0,120);
+}
+
+function resolveArchitectureImport(importPath,fromFile,files){
+    if(!importPath||/^(react|next|@?vercel|node:|https?:)/.test(importPath))return null;
+    var candidates=[];
+    if(importPath.startsWith('@/'))candidates.push('src/'+importPath.slice(2));
+    if(importPath.startsWith('~/'))candidates.push('src/'+importPath.slice(2));
+    if(importPath.startsWith('./')||importPath.startsWith('../')){
+        var baseParts=(architectureDirname(fromFile)?architectureDirname(fromFile).split('/'):[]).concat(importPath.split('/'));
+        var normalized=[];
+        baseParts.forEach(function(part){
+            if(!part||part==='.')return;
+            if(part==='..')normalized.pop();
+            else normalized.push(part);
+        });
+        candidates.push(normalized.join('/'));
+    }
+    if(!candidates.length)return null;
+    var exts=['','.js','.jsx','.ts','.tsx','.mjs','.cjs','/index.js','/index.jsx','/index.ts','/index.tsx'];
+    var pathMap=Object.create(null);
+    (files||[]).forEach(function(file){
+        var p=normalizeArchitecturePath(file.path||file.name);
+        pathMap[p.toLowerCase()]=file.path||file.name;
+    });
+    for(var i=0;i<candidates.length;i++){
+        for(var j=0;j<exts.length;j++){
+            var candidate=normalizeArchitecturePath(candidates[i]+exts[j]).toLowerCase();
+            if(pathMap[candidate])return normalizeArchitecturePath(pathMap[candidate]);
+        }
+    }
+    return null;
+}
+
+function makeArchitectureBlocks(facts,files,warnings){
+    var corePaths=new Set();
+    var visiblePaths=new Set();
+    facts.forEach(function(fact){
+        if(fact.isCore){
+            corePaths.add(fact.path);
+            visiblePaths.add(fact.path);
+        }
+    });
+    facts.forEach(function(fact){
+        if(corePaths.has(fact.path)){
+            fact.imports.forEach(function(importPath){
+                var resolved=resolveArchitectureImport(importPath,fact.path,files);
+                if(resolved)visiblePaths.add(resolved);
+            });
+        }else{
+            fact.imports.forEach(function(importPath){
+                var resolved=resolveArchitectureImport(importPath,fact.path,files);
+                if(resolved&&corePaths.has(resolved))visiblePaths.add(fact.path);
+            });
+        }
+    });
+    var candidates=facts.filter(function(fact){
+        if(!shouldShowArchitectureBlock(fact))return false;
+        if(fact.isTest||fact.isFixture||fact.isBuildOutput)return true;
+        return corePaths.has(fact.path)||visiblePaths.has(fact.path);
+    });
+    var priority={shell:0,'action-entry':1,page:2,api:3,'database-adapter':4,service:5,component:6,hook:7,module:8,utility:9,test:10,fixture:11};
+    candidates.sort(function(a,b){
+        return (priority[a.kind]||12)-(priority[b.kind]||12)||a.path.localeCompare(b.path);
+    });
+    if(candidates.length>ARCHITECTURE_MAX_BLOCKS){
+        warnings.push('Diagram capped at '+ARCHITECTURE_MAX_BLOCKS+' blocks; '+(candidates.length-ARCHITECTURE_MAX_BLOCKS)+' directly related items were omitted for readability.');
+        candidates=candidates.slice(0,ARCHITECTURE_MAX_BLOCKS);
+    }
+    var usedIds=Object.create(null);
+    var profile=(facts[0]&&facts[0].profile)||'generic';
+    var blocks=candidates.map(function(fact){
+        var baseId=makeMermaidSafeId(fact.path);
+        var id=baseId;
+        var counter=2;
+        while(usedIds[id]){
+            id=baseId+'_'+counter;
+            counter++;
+        }
+        usedIds[id]=true;
+        return{
+            id:id,
+            title:architectureTitle(fact),
+            kind:fact.kind,
+            role:fact.role,
+            group:fact.group,
+            layer:architectureLayer(fact),
+            route:fact.route,
+            files:[fact.path],
+            profile:profile,
+            isTest:!!fact.isTest,
+            isFixture:!!fact.isFixture,
+            isBuildOutput:!!fact.isBuildOutput,
+            loc:fact.loc||0
+        };
+    });
+    if(facts.some(function(fact){return fact.dbUsage;})){
+        blocks.push({id:'Storage_Database',title:'Database',kind:'database',role:'database',group:'Storage',layer:'Storage',profile:profile,files:[],isTest:false,isFixture:false,isBuildOutput:false,loc:0});
+    }
+    return aggregateArchitectureBlocks(blocks,profile,warnings);
+}
+
+function findBlockByFile(blocks,path){
+    path=normalizeArchitecturePath(path);
+    return (blocks||[]).find(function(block){return (block.files||[]).indexOf(path)>=0;})||null;
+}
+
+function findBlockByRoute(blocks,route){
+    route=normalizeArchitectureRoute(route);
+    var exact=(blocks||[]).find(function(block){return block.route&&normalizeArchitectureRoute(block.route)===route;});
+    if(exact)return exact;
+    return (blocks||[]).find(function(block){return block.route&&routeSegmentsMatch(block.route,route);})||null;
+}
+
+function findBlockByComponentName(blocks,name){
+    return (blocks||[]).find(function(block){
+        if(block.kind!=='component')return false;
+        if(block.title===name)return true;
+        var file=(block.files&&block.files[0])||'';
+        return architectureFileBaseName(file)===name;
+    })||null;
+}
+
+function findBlockByRole(blocks,role){
+    return (blocks||[]).find(function(block){return block.role===role;})||null;
+}
+
+function findBlockByPathEnds(blocks,suffix){
+    suffix=normalizeArchitecturePath(suffix).toLowerCase();
+    return (blocks||[]).find(function(block){
+        var file=normalizeArchitecturePath((block.files&&block.files[0])||'').toLowerCase();
+        return file===suffix||file.endsWith('/'+suffix);
+    })||null;
+}
+
+function inferDependencyKind(sourceKind,targetKind){
+    if(targetKind==='database')return'database';
+    if(sourceKind==='page'&&targetKind==='api')return'api-call';
+    if(targetKind==='component')return'renders';
+    if(targetKind==='hook')return'uses-hook';
+    return'depends-on';
+}
+
+function buildImportBasedDependencies(facts,blocks,files){
+    var deps=[];
+    facts.forEach(function(fact){
+        var source=findBlockByFile(blocks,fact.path);
+        if(!source)return;
+        fact.imports.forEach(function(importPath){
+            var resolved=resolveArchitectureImport(importPath,fact.path,files);
+            if(!resolved)return;
+            var target=findBlockByFile(blocks,resolved);
+            if(!target||target.id===source.id)return;
+            deps.push({
+                from:source.id,
+                to:target.id,
+                kind:inferDependencyKind(source.kind,target.kind),
+                label:architectureDependencyLabel(source.role,target.role,importPath),
+                confidence:'high'
+            });
+        });
+        fact.jsxComponents.forEach(function(componentName){
+            var target=findBlockByComponentName(blocks,componentName);
+            if(!target||target.id===source.id)return;
+            deps.push({from:source.id,to:target.id,kind:'renders',label:'renders '+componentName,confidence:'medium'});
+        });
+    });
+    return deps;
+}
+
+function buildSyntheticArchitectureDependencies(blocks,facts){
+    var deps=[];
+    var shell=findBlockByRole(blocks,'browser-shell');
+    var analyzer=findBlockByRole(blocks,'analyzer-loader')||findBlockByPathEnds(blocks,'card/lib/analyzer.js');
+    var collector=findBlockByRole(blocks,'collector')||findBlockByPathEnds(blocks,'card/lib/collect.js');
+    var action=findBlockByRole(blocks,'action-entry')||findBlockByPathEnds(blocks,'card/index.js');
+    if(shell&&analyzer){
+        deps.push({from:shell.id,to:analyzer.id,kind:'runtime',label:architectureDependencyLabel(shell.role,analyzer.role),confidence:'high'});
+    }
+    if(shell&&collector){
+        deps.push({from:shell.id,to:collector.id,kind:'runtime',label:architectureDependencyLabel(shell.role,collector.role),confidence:'high'});
+    }
+    if(action&&shell){
+        deps.push({from:action.id,to:shell.id,kind:'runtime',label:architectureDependencyLabel(action.role,shell.role),confidence:'high'});
+    }
+    var state=findBlockByRole(blocks,'state')||findBlockByPathEnds(blocks,'card/lib/state.js');
+    var pr=findBlockByRole(blocks,'pr')||findBlockByPathEnds(blocks,'card/lib/pr.js');
+    var git=findBlockByRole(blocks,'git')||findBlockByPathEnds(blocks,'card/lib/git.js');
+    var inputs=findBlockByRole(blocks,'inputs')||findBlockByPathEnds(blocks,'card/lib/inputs.js');
+    if(analyzer&&state){
+        deps.push({from:analyzer.id,to:state.id,kind:'runtime',label:architectureDependencyLabel('analyzer-loader','state'),confidence:'medium'});
+    }
+    if(pr&&git){
+        deps.push({from:pr.id,to:git.id,kind:'runtime',label:architectureDependencyLabel('pr','git'),confidence:'high'});
+    }
+    if(action&&collector&&inputs){
+        deps.push({from:collector.id,to:inputs.id,kind:'runtime',label:architectureDependencyLabel('collector','inputs'),confidence:'medium'});
+    }
+    if(action&&collector&&git){
+        deps.push({from:collector.id,to:git.id,kind:'runtime',label:architectureDependencyLabel('collector','git'),confidence:'medium'});
+    }
+    var appShell=findBlockByRole(blocks,'app-shell');
+    if(appShell){
+        blocks.forEach(function(block){
+            if(block.role!=='frontend-route'||block.id===appShell.id)return;
+            deps.push({from:appShell.id,to:block.id,kind:'runtime',label:architectureDependencyLabel('app-shell','frontend-route'),confidence:'high'});
+        });
+    }
+    blocks.forEach(function(block){
+        if(block.role!=='frontend-route')return;
+        var component=blocks.find(function(candidate){
+            return candidate.role==='frontend-component'&&candidate.route&&block.route&&normalizeArchitectureRoute(candidate.route)===normalizeArchitectureRoute(block.route);
+        });
+        if(component&&component.id!==block.id){
+            deps.push({from:block.id,to:component.id,kind:'runtime',label:architectureDependencyLabel('frontend-route','frontend-component'),confidence:'high'});
+        }
+    });
+    blocks.forEach(function(block){
+        if(block.role!=='frontend-component')return;
+        var analyzer=blocks.find(function(candidate){return candidate.role==='platform-analyzer';});
+        if(analyzer&&analyzer.id!==block.id){
+            deps.push({from:block.id,to:analyzer.id,kind:'runtime',label:architectureDependencyLabel('frontend-component','platform-analyzer'),confidence:'medium'});
+        }
+    });
+    var routesBlock=findBlockByRole(blocks,'backend-routes');
+    var middlewareBlock=findBlockByRole(blocks,'backend-middleware');
+    var servicesBlock=findBlockByRole(blocks,'backend-services');
+    if(routesBlock&&middlewareBlock){
+        deps.push({from:routesBlock.id,to:middlewareBlock.id,kind:'runtime',label:architectureDependencyLabel('backend-routes','backend-middleware'),confidence:'medium'});
+    }
+    if(routesBlock&&servicesBlock){
+        deps.push({from:routesBlock.id,to:servicesBlock.id,kind:'runtime',label:architectureDependencyLabel('backend-routes','backend-services'),confidence:'medium'});
+    }
+    facts.forEach(function(fact){
+        if(!fact.isTest)return;
+        var source=findBlockByFile(blocks,fact.path);
+        if(!source)return;
+        var targets=[];
+        if(testFileReferencesCore(fact.content)){
+            if(shell)targets.push(shell);
+            if(analyzer)targets.push(analyzer);
+            if(collector)targets.push(collector);
+        }
+        inferTestTargetPaths(fact.path).forEach(function(suffix){
+            var target=findBlockByPathEnds(blocks,suffix);
+            if(target)targets.push(target);
+        });
+        var seen=new Set();
+        targets.forEach(function(target){
+            if(!target||target.id===source.id||seen.has(target.id))return;
+            seen.add(target.id);
+            deps.push({from:source.id,to:target.id,kind:'tests',label:'tests',confidence:'high'});
+        });
+    });
+    return deps;
+}
+
+function dedupeArchitectureDependencies(deps){
+    var seen=new Set();
+    return (deps||[]).filter(function(dep){
+        var key=[dep.from,dep.to,dep.kind,dep.label].join('|');
+        if(seen.has(key))return false;
+        seen.add(key);
+        return true;
+    });
+}
+
+function buildArchitectureDependencies(facts,blocks,files){
+    var deps=[];
+    facts.forEach(function(fact){
+        var source=findBlockByFile(blocks,fact.path);
+        if(!source)return;
+        fact.links.forEach(function(link){
+            var target=findBlockByRoute(blocks,link);
+            if(target&&target.id!==source.id){
+                deps.push({from:source.id,to:target.id,kind:'navigation',label:'links '+link,confidence:'high'});
+            }
+        });
+        fact.apiCalls.forEach(function(call){
+            var target=findBlockByRoute(blocks,call.url);
+            if(target&&target.id!==source.id){
+                deps.push({from:source.id,to:target.id,kind:'api-call',label:call.method+' '+call.url,confidence:'high'});
+            }
+        });
+        if(fact.dbUsage){
+            deps.push({from:source.id,to:'Storage_Database',kind:'database',label:'queries',confidence:'medium'});
+        }
+    });
+    deps=deps.concat(buildImportBasedDependencies(facts,blocks,files));
+    deps=deps.concat(buildSyntheticArchitectureDependencies(blocks,facts));
+    return dedupeArchitectureDependencies(deps).filter(function(dep){
+        if(!dep.label||/^uses \d+ calls?$/i.test(dep.label))return false;
+        return !!findBlockById(blocks,dep.from)&&!!findBlockById(blocks,dep.to);
+    });
+}
+
+function getRenderedArchitectureDependencies(dependencies,visibleBlockIds){
+    var visible=visibleBlockIds||null;
+    var priority={high:0,medium:1,low:2};
+    return (dependencies||[]).filter(function(dep){
+        if(!visible)return true;
+        return visible.has(dep.from)&&visible.has(dep.to);
+    }).sort(function(a,b){
+        return (priority[a.confidence]||9)-(priority[b.confidence]||9)||
+            String(a.from).localeCompare(String(b.from))||
+            String(a.to).localeCompare(String(b.to));
+    }).slice(0,ARCHITECTURE_MAX_RENDERED_DEPENDENCIES);
+}
+
+function findBlockById(blocks,id){
+    return (blocks||[]).find(function(block){return block.id===id;})||null;
+}
+
+function buildArchitectureGroups(blocks){
+    var groups={};
+    (blocks||[]).forEach(function(block){
+        var key=block.group||block.layer||'Application';
+        if(!groups[key])groups[key]=[];
+        groups[key].push(block.id);
+    });
+    return groups;
+}
+
+function formatMermaidBlock(block){
+    var label=escapeMermaidLabel(block.title);
+    var filePath=(block.files&&block.files[0])||'';
+    if(block.kind==='shell'||block.group==='App Entry / Shell'){
+        if(filePath)label+='<br/>'+escapeMermaidLabel(filePath);
+        if((block.files||[]).length>1)label+='<br/>'+((block.files||[]).length)+' shell files';
+        else if(block.role==='browser-shell'||block.group==='Browser App')label+='<br/>React UI + Worker + Visualization';
+    }else if(filePath){
+        label+='<br/>'+escapeMermaidLabel(filePath);
+    }else if(block.route){
+        label+='<br/>'+escapeMermaidLabel(block.route);
+    }
+    if(block.kind==='database')return '[("'+label+'")]';
+    if(block.kind==='api')return '{{"'+label+'"}}';
+    return '["'+label+'"]';
+}
+
+function architectureGroupStyleClass(group){
+    if(group==='Browser App'||group==='App Entry / Shell')return group==='App Entry / Shell'?'appentry':'browser';
+    if(group==='GitHub Action')return'action';
+    if(group==='Analysis Core')return'analysis';
+    if(group==='Repository Collection')return'collection';
+    if(group==='Rendering / Reports')return'rendering';
+    if(group==='Frontend Routes / Views'||group==='Frontend Routes')return'frontend';
+    if(group==='Frontend Components'||group==='Frontend Page Components')return'fecomponents';
+    if(group==='Backend / API Layer'||group==='Backend API / Platform Logic')return'backend';
+    if(group==='Services / Business Logic')return'services';
+    if(group==='Data / Storage')return'storage';
+    if(group==='Shared / Utilities'||group==='Shared Services / Utils')return'shared';
+    if(group==='Configuration')return'config';
+    if(group==='Content / Data')return'content';
+    if(group==='Build Output')return'buildoutput';
+    if(group==='Testing')return'testing';
+    if(group==='Fixtures / Examples')return'fixtures';
+    if(group==='Storage')return'storage';
+    return'application';
+}
+
+function getVisibleArchitectureBlocks(blocks,includeTests,includeBuildOutput){
+    return (blocks||[]).filter(function(block){
+        if(block.isBuildOutput||block.group==='Build Output'||block.role==='build-output')return !!includeBuildOutput;
+        if(block.isTest||block.isFixture)return !!includeTests;
+        return true;
+    });
+}
+
+function computeArchitectureStats(blocks,dependencies){
+    return{
+        blocks:blocks.length,
+        dependencies:dependencies.length,
+        routes:blocks.filter(function(block){return block.kind==='page'||block.kind==='shell';}).length,
+        apiRoutes:blocks.filter(function(block){return block.kind==='api';}).length,
+        databaseTouchpoints:dependencies.filter(function(dep){return dep.kind==='database';}).length
+    };
+}
+
+function groupBlocksByArchitectureGroup(blocks,profile){
+    var order=getArchitectureGroupOrder(profile||'generic');
+    var grouped={};
+    order.forEach(function(group){grouped[group]=[];});
+    (blocks||[]).forEach(function(block){
+        var group=block.group||'Application';
+        if(!grouped[group])grouped[group]=[];
+        grouped[group].push(block);
+    });
+    return {order:order,grouped:grouped};
+}
+
+function generateMermaidBlockDiagram(diagram,includeTests,includeBuildOutput){
+    var allBlocks=diagram.blocks||[];
+    var blocks=getVisibleArchitectureBlocks(allBlocks,!!includeTests,!!includeBuildOutput);
+    var profile=diagram.profile||'generic';
+    if(!blocks.length){
+        return [
+            'flowchart TD',
+            '  classDef application fill:#252529,stroke:#8b8b95,color:#f0f0f2;',
+            '  NoArchitecture["No architecture blocks detected"]',
+            '  class NoArchitecture application;'
+        ].join('\n');
+    }
+    var visibleIds=new Set(blocks.map(function(block){return block.id;}));
+    var lines=[];
+    lines.push('%%{init: {"flowchart": {"nodeSpacing": 45, "rankSpacing": 80}} }%%');
+    lines.push('flowchart TB');
+    lines.push('  classDef browser fill:#102033,stroke:#4d9fff,color:#f0f0f2;');
+    lines.push('  classDef action fill:#1f2433,stroke:#7c8cff,color:#f0f0f2;');
+    lines.push('  classDef analysis fill:#102033,stroke:#4d9fff,color:#f0f0f2;');
+    lines.push('  classDef collection fill:#251b33,stroke:#a78bfa,color:#f0f0f2;');
+    lines.push('  classDef rendering fill:#2b2414,stroke:#ff9f43,color:#f0f0f2;');
+    lines.push('  classDef testing fill:#252529,stroke:#8b8b95,color:#f0f0f2;');
+    lines.push('  classDef fixtures fill:#1f2b1f,stroke:#22c55e,color:#f0f0f2;');
+    lines.push('  classDef storage fill:#2b2414,stroke:#ff9f43,color:#f0f0f2;');
+    lines.push('  classDef application fill:#252529,stroke:#8b8b95,color:#f0f0f2;');
+    lines.push('  classDef appentry fill:#102033,stroke:#4d9fff,color:#f0f0f2;');
+    lines.push('  classDef frontend fill:#102033,stroke:#4d9fff,color:#f0f0f2;');
+    lines.push('  classDef fecomponents fill:#152238,stroke:#6eb6ff,color:#f0f0f2;');
+    lines.push('  classDef backend fill:#251b33,stroke:#a78bfa,color:#f0f0f2;');
+    lines.push('  classDef config fill:#2b2414,stroke:#ff9f43,color:#f0f0f2;');
+    lines.push('  classDef content fill:#1f2b1f,stroke:#22c55e,color:#f0f0f2;');
+    lines.push('  classDef buildoutput fill:#252529,stroke:#666,color:#aaa;');
+    var layout=groupBlocksByArchitectureGroup(blocks,profile);
+    layout.order.forEach(function(group){
+        if(!layout.grouped[group]||!layout.grouped[group].length)return;
+        var subgraphLabel=group;
+        if(group==='Testing'&&!includeTests)return;
+        if(group==='Testing'&&includeTests)subgraphLabel='Testing - optional';
+        if(group==='Build Output'&&!includeBuildOutput)return;
+        if(group==='Build Output'&&includeBuildOutput)subgraphLabel='Build Output - optional';
+        lines.push('  subgraph '+makeMermaidSafeId(group)+'_Group["'+escapeMermaidLabel(subgraphLabel)+'"]');
+        lines.push('    direction TB');
+        layout.grouped[group].forEach(function(block){
+            lines.push('    '+block.id+formatMermaidBlock(block));
+        });
+        lines.push('  end');
+    });
+    getRenderedArchitectureDependencies(diagram.dependencies||[],visibleIds).forEach(function(dep){
+        lines.push('  '+dep.from+' -->|"'+escapeMermaidLabel(dep.label||dep.kind)+'"| '+dep.to);
+    });
+    blocks.forEach(function(block){
+        lines.push('  class '+block.id+' '+architectureGroupStyleClass(block.group)+';');
+    });
+    return lines.join('\n');
+}
+
+function buildArchitectureDiagram(files){
+    var warnings=[];
+    var framework=detectArchitectureFramework(files);
+    var facts=extractArchitectureFacts(files,framework);
+    var profile=(facts[0]&&facts[0].profile)||detectArchitectureProfile(files,framework);
+    var blocks=makeArchitectureBlocks(facts,files,warnings);
+    var dependencies=buildArchitectureDependencies(facts,blocks,files);
+    if(dependencies.length>ARCHITECTURE_MAX_RENDERED_DEPENDENCIES){
+        warnings.push('Diagram rendering shows the '+ARCHITECTURE_MAX_RENDERED_DEPENDENCIES+' strongest dependencies; export JSON includes all '+dependencies.length+'.');
+    }
+    if(framework==='Next.js'&&!blocks.length){
+        warnings.push('Next.js was detected, but no page or API route blocks were visible in the analyzed files.');
+    }else if(framework!=='Next.js'&&!blocks.length){
+        warnings.push('No code files with architecture-significant blocks were visible in the analyzed files.');
+    }
+    var visibleBlocks=getVisibleArchitectureBlocks(blocks,false,false);
+    var visibleIds=new Set(visibleBlocks.map(function(block){return block.id;}));
+    var visibleDependencies=(dependencies||[]).filter(function(dep){return visibleIds.has(dep.from)&&visibleIds.has(dep.to);});
+    var stats=computeArchitectureStats(visibleBlocks,visibleDependencies);
+    stats.warnings=warnings.length;
+    var hiddenSummary=computeArchitectureHiddenSummary(facts,blocks,false,false);
+    var diagram={
+        framework:framework,
+        profile:profile,
+        type:'block-diagram',
+        options:{includeTests:false,includeBuildOutput:false},
+        mermaid:'',
+        blocks:blocks,
+        dependencies:dependencies,
+        groups:buildArchitectureGroups(visibleBlocks),
+        stats:stats,
+        hiddenSummary:hiddenSummary,
+        warnings:warnings
+    };
+    diagram.mermaid=generateMermaidBlockDiagram(diagram,false,false);
+    return diagram;
+}
+
 async function buildAnalysisData(options){
     var analyzed=options.analyzed||[];
     var allFns=options.allFns||[];
@@ -3083,7 +4459,7 @@ async function buildAnalysisData(options){
     var yieldFn=options.yieldFn||yieldToBrowser;
     var CALL_BATCH=30;
 
-    progress('Building dependency graph (1/5)...');
+    progress('Building dependency graph (1/6)...');
     await yieldFn();
     await Parser.prepareTreeSitter(analyzed);
     var fnNames=[...new Set(allFns.map(function(f){return f.name;}))];
@@ -3114,7 +4490,7 @@ async function buildAnalysisData(options){
 
     for(var bi=0;bi<analyzed.length;bi+=CALL_BATCH){
         var batchEnd=Math.min(bi+CALL_BATCH,analyzed.length);
-        progress('Analyzing dependencies (2/5)... '+batchEnd+'/'+analyzed.length+' files');
+        progress('Analyzing dependencies (2/6)... '+batchEnd+'/'+analyzed.length+' files');
         for(var fi=bi;fi<batchEnd;fi++){
             var file=analyzed[fi];
             if(!file.content)continue;
@@ -3197,12 +4573,12 @@ async function buildAnalysisData(options){
     });
     if(circular.length)issues.push({type:'critical',title:circular.length+' Circular Dependencies',desc:'Files that import each other',items:circular.map(function(p){var parts=p.split('|');return{name:parts.map(function(x){return x.split('/').pop();}).join(' ↔ '),files:parts};})});
 
-    progress('Detecting patterns (3/5)...');
+    progress('Detecting patterns (3/6)...');
     await yieldFn();
     var patterns=Parser.detectPatterns(analyzed);
     var securityIssues=Parser.detectSecurity(analyzed);
 
-    progress('Analyzing code quality (4/5)...');
+    progress('Analyzing code quality (4/6)...');
     await yieldFn();
     var duplicates=Parser.detectDuplicates(analyzed,allFns);
     var layerViolations=Parser.detectLayerViolations(analyzed,conns);
@@ -3214,7 +4590,11 @@ async function buildAnalysisData(options){
         if(ci+CALL_BATCH<analyzed.length)await yieldFn();
     }
 
-    progress('Finalizing (5/5)...');
+    progress('Building architecture diagram (5/6)...');
+    await yieldFn();
+    var architectureDiagram=buildArchitectureDiagram(analyzed);
+
+    progress('Finalizing (6/6)...');
     await yieldFn();
     analyzed.forEach(function(f){f.content=null;});
 
@@ -3257,6 +4637,7 @@ async function buildAnalysisData(options){
         securityIssues:securityIssues,
         duplicates:duplicates,
         layerViolations:layerViolations,
+        architectureDiagram:architectureDiagram,
         deadFunctions:deadFns.map(function(x){var codeLines=x[1].code?x[1].code.split('\n').length:0;return{name:x[0],file:x[1].file,folder:x[1].folder,line:x[1].line,code:x[1].code,codeLines:codeLines,ext:x[1].file.split('.').pop()};}),
         excludePatterns:excludePatterns,
         stats:{files:analyzed.length,functions:allFns.length,connections:conns.length,dead:deadFns.length,patterns:patterns.length,security:securityIssues.filter(function(i){return i.severity==='high';}).length,duplicates:duplicates.length,violations:layerViolations.length,loc:totalLoc,languages:langArray,parserModes:parserArray}
@@ -3910,6 +5291,10 @@ function App(){
     var _am=useState(window.innerWidth),viewportWidth=_am[0],setViewportWidth=_am[1];
     var _an=useState(null),mobilePanel=_an[0],setMobilePanel=_an[1];
     var _ao=useState(48),topbarHeight=_ao[0],setTopbarHeight=_ao[1];
+    var _arch=useState({scale:1,x:0,y:0}),architectureViewport=_arch[0],setArchitectureViewport=_arch[1];
+    var _archDrag=useState(false),architectureDragging=_archDrag[0],setArchitectureDragging=_archDrag[1];
+    var _archTests=useState(false),architectureIncludeTests=_archTests[0],setArchitectureIncludeTests=_archTests[1];
+    var _archBuild=useState(false),architectureIncludeBuildOutput=_archBuild[0],setArchitectureIncludeBuildOutput=_archBuild[1];
     var isMobile=viewportWidth<=980;
     var svgRef=useRef(null);
     var topbarRef=useRef(null);
@@ -3920,6 +5305,8 @@ function App(){
     var sankeyRef=useRef(null);
     var disjointRef=useRef(null);
     var bundleRef=useRef(null);
+    var architectureRenderRef=useRef(null);
+    var architectureDragRef=useRef(null);
     var zoomRef=useRef(null);
     var simRef=useRef(null);
     var nodesRef=useRef(null);
@@ -3935,7 +5322,76 @@ function App(){
     var activeExcludePatterns=useMemo(function(){return compileExcludePatterns(excludePatternInput);},[excludePatternInput]);
     var customExcludeCount=activeExcludePatterns.length;
 
-    useEffect(function(){document.body.className=theme==='light'?'light':'';},[theme]);
+    useEffect(function(){
+        document.body.className=theme==='light'?'light':'';
+        if(window.mermaid){
+            window.mermaid.initialize({
+                startOnLoad:false,
+                securityLevel:'strict',
+                theme:theme==='light'?'default':'dark',
+                flowchart:{htmlLabels:true,curve:'basis'}
+            });
+        }
+    },[theme]);
+
+    useEffect(function(){
+        if(graphConfig.vizType!=='architecture')return;
+        var container=architectureRenderRef.current;
+        if(!container)return;
+        var diagram=data&&data.architectureDiagram;
+        var mermaidText=diagram?generateMermaidBlockDiagram(diagram,architectureIncludeTests,architectureIncludeBuildOutput):'';
+        if(!mermaidText){
+            container.innerHTML='<div class="empty-state"><div class="empty-title">No architecture diagram</div><div class="empty-desc">Analyze a repository to generate a block diagram.</div></div>';
+            return;
+        }
+        if(!window.mermaid){
+            container.innerHTML='<div class="empty-state"><div class="empty-title">Mermaid unavailable</div><div class="empty-desc">The Mermaid renderer did not load. You can still export the raw Mermaid source.</div></div>';
+            return;
+        }
+        var cancelled=false;
+        var renderId='codeflow-architecture-'+Date.now();
+        container.innerHTML='<div class="loading"><div class="spinner"></div><div class="loading-text">Rendering block diagram...</div></div>';
+        try{
+            window.mermaid.initialize({
+                startOnLoad:false,
+                securityLevel:'strict',
+                theme:theme==='light'?'default':'dark',
+                flowchart:{htmlLabels:true,curve:'basis'}
+            });
+            window.mermaid.render(renderId,mermaidText).then(function(result){
+                if(cancelled||!architectureRenderRef.current)return;
+                architectureRenderRef.current.innerHTML='<div class="architecture-pan">'+result.svg+'</div>';
+                var svg=architectureRenderRef.current.querySelector('.architecture-pan svg');
+                if(!svg){
+                    architectureRenderRef.current.innerHTML='<div class="empty-state"><div class="empty-title">Mermaid render failed</div><div class="empty-desc">The renderer returned no SVG for this diagram.</div></div>';
+                    return;
+                }
+                normalizeArchitectureSvg(svg);
+                requestAnimationFrame(function(){
+                    if(!cancelled)fitArchitectureViewport();
+                });
+            }).catch(function(err){
+                if(cancelled||!architectureRenderRef.current)return;
+                architectureRenderRef.current.innerHTML='<div class="empty-state"><div class="empty-title">Mermaid render failed</div><div class="empty-desc">'+escapeHtml(err&&err.message?err.message:String(err))+'</div></div>';
+            });
+        }catch(err){
+            container.innerHTML='<div class="empty-state"><div class="empty-title">Mermaid render failed</div><div class="empty-desc">'+escapeHtml(err&&err.message?err.message:String(err))+'</div></div>';
+        }
+        return function(){cancelled=true;};
+    },[data,graphConfig.vizType,theme,architectureIncludeTests,architectureIncludeBuildOutput]);
+
+    useEffect(function(){
+        var container=architectureRenderRef.current;
+        var pan=container?container.querySelector('.architecture-pan'):null;
+        if(!pan)return;
+        pan.style.transform='translate('+architectureViewport.x+'px,'+architectureViewport.y+'px) scale('+architectureViewport.scale+')';
+    },[architectureViewport,data,graphConfig.vizType,theme]);
+
+    useEffect(function(){
+        if(graphConfig.vizType!=='architecture')return;
+        var frame=requestAnimationFrame(function(){fitArchitectureViewport();});
+        return function(){cancelAnimationFrame(frame);};
+    },[viewportWidth,sidebarWidth,rightPanelWidth,graphConfig.vizType]);
 
     useEffect(function(){
         var el=folderInputRef.current;
@@ -5556,6 +7012,170 @@ function App(){
         return root+'text{font-family:JetBrains Mono,monospace;pointer-events:none}';
     }
     function exportSVG(){if(!svgRef.current)return;var svgClone=svgRef.current.cloneNode(true);svgClone.setAttribute('xmlns','http://www.w3.org/2000/svg');svgClone.setAttribute('width',svgRef.current.clientWidth);svgClone.setAttribute('height',svgRef.current.clientHeight);var style=document.createElementNS('http://www.w3.org/2000/svg','style');style.textContent=getEmbeddedSvgStyle();svgClone.insertBefore(style,svgClone.firstChild);var blob=new Blob([new XMLSerializer().serializeToString(svgClone)],{type:'image/svg+xml'});var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download='codeflow-'+Date.now()+'.svg';a.click();URL.revokeObjectURL(url);}
+    function copyText(text,successMessage){
+        if(!text){showNotification('Nothing to copy.','error');return;}
+        if(navigator.clipboard&&navigator.clipboard.writeText){
+            navigator.clipboard.writeText(text).then(function(){showNotification(successMessage||'Copied.','success');}).catch(function(){fallbackCopyText(text,successMessage);});
+            return;
+        }
+        fallbackCopyText(text,successMessage);
+    }
+    function fallbackCopyText(text,successMessage){
+        var textarea=document.createElement('textarea');
+        textarea.value=text;
+        textarea.setAttribute('readonly','');
+        textarea.style.position='fixed';
+        textarea.style.left='-9999px';
+        document.body.appendChild(textarea);
+        textarea.select();
+        try{
+            document.execCommand('copy');
+            showNotification(successMessage||'Copied.','success');
+        }catch(err){
+            showNotification('Copy failed.','error');
+        }
+        document.body.removeChild(textarea);
+    }
+    function copyMermaid(){
+        var diagram=data&&data.architectureDiagram;
+        var text=diagram?generateMermaidBlockDiagram(diagram,architectureIncludeTests,architectureIncludeBuildOutput):'';
+        copyText(text,'Mermaid diagram copied.');
+    }
+    function normalizeArchitectureSvg(svg){
+        if(!svg)return{width:0,height:0};
+        var width=0;
+        var height=0;
+        var viewBox=svg.getAttribute('viewBox')||'';
+        var viewBoxParts=viewBox.trim().split(/\s+/).map(function(part){return Number(part);});
+        if(viewBoxParts.length===4&&viewBoxParts.every(function(value){return isFinite(value);})){
+            width=viewBoxParts[2];
+            height=viewBoxParts[3];
+        }
+        if(!width||!height){
+            try{
+                var bbox=svg.getBBox();
+                if(bbox&&bbox.width&&bbox.height){
+                    width=bbox.width;
+                    height=bbox.height;
+                    svg.setAttribute('viewBox',[bbox.x,bbox.y,bbox.width,bbox.height].join(' '));
+                }
+            }catch(err){}
+        }
+        if(!width||!height){
+            var rect=svg.getBoundingClientRect();
+            width=rect.width||900;
+            height=rect.height||600;
+        }
+        width=Math.max(320,Math.ceil(width));
+        height=Math.max(240,Math.ceil(height));
+        svg.setAttribute('width',String(width));
+        svg.setAttribute('height',String(height));
+        svg.setAttribute('data-codeflow-width',String(width));
+        svg.setAttribute('data-codeflow-height',String(height));
+        svg.style.width=width+'px';
+        svg.style.height=height+'px';
+        svg.style.maxWidth='none';
+        return{width:width,height:height};
+    }
+    function fitArchitectureViewport(){
+        var container=architectureRenderRef.current;
+        var svg=container?container.querySelector('.architecture-pan svg'):null;
+        if(!container||!svg)return;
+        var rect=container.getBoundingClientRect();
+        var dims=normalizeArchitectureSvg(svg);
+        var availableWidth=Math.max(240,rect.width-64);
+        var availableHeight=Math.max(180,rect.height-64);
+        var scale=Math.min(1,availableWidth/dims.width,availableHeight/dims.height);
+        scale=clampArchitectureScale(scale);
+        var x=Math.max(24,Math.round((rect.width-dims.width*scale)/2));
+        var y=Math.max(24,Math.round((rect.height-dims.height*scale)/2));
+        setArchitectureViewport({scale:scale,x:x,y:y});
+    }
+    function clampArchitectureScale(value){
+        return Math.max(0.08,Math.min(3,value));
+    }
+    function zoomArchitecture(multiplier,clientX,clientY){
+        var container=architectureRenderRef.current;
+        setArchitectureViewport(function(prev){
+            var nextScale=clampArchitectureScale(prev.scale*multiplier);
+            var rect=container?container.getBoundingClientRect():null;
+            var px=rect?(clientX==null?rect.left+rect.width/2:clientX)-rect.left:0;
+            var py=rect?(clientY==null?rect.top+rect.height/2:clientY)-rect.top:0;
+            var ratio=nextScale/prev.scale;
+            return{
+                scale:nextScale,
+                x:px-(px-prev.x)*ratio,
+                y:py-(py-prev.y)*ratio
+            };
+        });
+    }
+    function resetArchitectureViewport(){
+        fitArchitectureViewport();
+    }
+    function handleArchitecturePointerDown(e){
+        if(e.button!==undefined&&e.button!==0)return;
+        e.preventDefault();
+        architectureDragRef.current={
+            pointerId:e.pointerId,
+            startX:e.clientX,
+            startY:e.clientY,
+            originX:architectureViewport.x,
+            originY:architectureViewport.y
+        };
+        if(e.currentTarget&&e.currentTarget.setPointerCapture){
+            try{e.currentTarget.setPointerCapture(e.pointerId);}catch(err){}
+        }
+        setArchitectureDragging(true);
+    }
+    function handleArchitecturePointerMove(e){
+        var drag=architectureDragRef.current;
+        if(!drag)return;
+        e.preventDefault();
+        setArchitectureViewport(function(prev){
+            return Object.assign({},prev,{
+                x:drag.originX+e.clientX-drag.startX,
+                y:drag.originY+e.clientY-drag.startY
+            });
+        });
+    }
+    function handleArchitecturePointerUp(e){
+        if(e&&e.currentTarget&&e.currentTarget.releasePointerCapture&&architectureDragRef.current){
+            try{e.currentTarget.releasePointerCapture(architectureDragRef.current.pointerId);}catch(err){}
+        }
+        architectureDragRef.current=null;
+        setArchitectureDragging(false);
+    }
+    function handleArchitectureWheel(e){
+        e.preventDefault();
+        zoomArchitecture(e.deltaY<0?1.12:0.88,e.clientX,e.clientY);
+    }
+    function downloadMermaid(){
+        var diagram=data&&data.architectureDiagram;
+        var text=diagram?generateMermaidBlockDiagram(diagram,architectureIncludeTests,architectureIncludeBuildOutput):'';
+        if(!text){showNotification('No Mermaid source to download.','error');return;}
+        var blob=new Blob([text],{type:'text/plain'});
+        var url=URL.createObjectURL(blob);
+        var a=document.createElement('a');
+        a.href=url;
+        a.download='codeflow-architecture.mmd';
+        a.click();
+        URL.revokeObjectURL(url);
+        showNotification('Mermaid source downloaded.','success');
+    }
+    function downloadArchitectureSVG(){
+        var svg=architectureRenderRef.current?architectureRenderRef.current.querySelector('svg'):null;
+        if(!svg){showNotification('No rendered architecture SVG to download.','error');return;}
+        var clone=svg.cloneNode(true);
+        clone.setAttribute('xmlns','http://www.w3.org/2000/svg');
+        var blob=new Blob([new XMLSerializer().serializeToString(clone)],{type:'image/svg+xml'});
+        var url=URL.createObjectURL(blob);
+        var a=document.createElement('a');
+        a.href=url;
+        a.download='codeflow-architecture.svg';
+        a.click();
+        URL.revokeObjectURL(url);
+        showNotification('Architecture SVG downloaded.','success');
+    }
     function graphSvgToPngDataUrlForPdf(scale,done){
         scale=scale||2;
         if(!svgRef.current){done('No graph to export');return;}
@@ -5633,7 +7253,7 @@ function App(){
             });
         });
     }
-    function exportJSON(){if(!data)return;var blob=new Blob([JSON.stringify({stats:data.stats,files:data.files.map(function(f){return{path:f.path,fns:f.functions.length,layer:f.layer,lines:f.lines,dependencies:f.dependencies||[]};}),connections:data.connections,issues:data.issues,patterns:data.patterns,security:data.securityIssues},null,2)],{type:'application/json'});var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download='codeflow-analysis.json';a.click();}
+    function exportJSON(){if(!data)return;var blob=new Blob([JSON.stringify({stats:data.stats,files:data.files.map(function(f){return{path:f.path,fns:f.functions.length,layer:f.layer,lines:f.lines,dependencies:f.dependencies||[]};}),connections:data.connections,issues:data.issues,patterns:data.patterns,security:data.securityIssues,architectureDiagram:data.architectureDiagram},null,2)],{type:'application/json'});var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download='codeflow-analysis.json';a.click();URL.revokeObjectURL(url);}
     function getAnalysisSourceLabel(){
         if(localSourceKind==='folder')return'Local Folder';
         if(localSourceKind==='zip')return repoInfo&&repoInfo.name?repoInfo.name:'ZIP Archive';
@@ -5874,8 +7494,120 @@ function App(){
         navigator.clipboard.writeText(shareUrl).then(function(){showNotification('Link copied to clipboard!');}).catch(function(){showNotification('Failed to copy link','error');});
     }
     function analyzePR(){if(!prUrl||!repoInfo)return;var m=prUrl.match(/\/pull\/(\d+)/);if(!m){showNotification('Invalid PR URL','error');return;}GitHub.getPR(repoInfo.owner,repoInfo.repo,m[1]).then(function(pr){if(pr)setPrData(pr);else showNotification('Could not load PR','error');});}
-    function resetAnalysis(){setData(null);setSelected(null);setBlastRadius(null);setOwnership(null);setRepoInfo(null);setRepoUrl('');setPrData(null);setFolderFilter(null);setLocalDirHandle(null);setLocalSourceKind(null);zipArchiveRef.current=null;zipFileRef.current=null;window.history.replaceState({},'',window.location.pathname);}
+    function resetAnalysis(){setData(null);setSelected(null);setBlastRadius(null);setOwnership(null);setRepoInfo(null);setRepoUrl('');setPrData(null);setFolderFilter(null);setLocalDirHandle(null);setLocalSourceKind(null);setArchitectureIncludeTests(false);setArchitectureIncludeBuildOutput(false);zipArchiveRef.current=null;zipFileRef.current=null;window.history.replaceState({},'',window.location.pathname);}
     function filterByFolder(path){setFolderFilter(function(prev){return prev===path?null:path;});}
+    function getArchitectureViewStats(diagram,includeTests,includeBuildOutput){
+        if(!diagram)return{blocks:0,dependencies:0,routes:0,apiRoutes:0,databaseTouchpoints:0,warnings:0};
+        var blocks=getVisibleArchitectureBlocks(diagram.blocks||[],!!includeTests,!!includeBuildOutput);
+        var visibleIds=new Set(blocks.map(function(block){return block.id;}));
+        var dependencies=(diagram.dependencies||[]).filter(function(dep){return visibleIds.has(dep.from)&&visibleIds.has(dep.to);});
+        var stats=computeArchitectureStats(blocks,dependencies);
+        stats.warnings=diagram.stats&&diagram.stats.warnings!=null?diagram.stats.warnings:(diagram.warnings?diagram.warnings.length:0);
+        return stats;
+    }
+    function renderArchitectureView(){
+        var diagram=data&&data.architectureDiagram;
+        var stats=getArchitectureViewStats(diagram,architectureIncludeTests,architectureIncludeBuildOutput);
+        var hidden=diagram&&diagram.hiddenSummary?diagram.hiddenSummary:{build:0,tests:0,fixtures:0,lowSignal:0,total:0};
+        return React.createElement('div',{className:'architecture-view'},
+            React.createElement('div',{className:'architecture-shell'},
+                React.createElement('div',{className:'architecture-summary-bar'},
+                    React.createElement('div',{className:'architecture-chip'},React.createElement('strong',null,diagram?diagram.framework:'Unknown'),' framework'),
+                    diagram&&diagram.profile&&React.createElement('div',{className:'architecture-chip'},React.createElement('strong',null,diagram.profile),' profile'),
+                    React.createElement('div',{className:'architecture-chip'},React.createElement('strong',null,stats.blocks||0),' blocks'),
+                    hidden.total>0&&React.createElement('div',{className:'architecture-chip'},React.createElement('strong',null,hidden.total),' hidden'),
+                    React.createElement('div',{className:'architecture-chip'},React.createElement('strong',null,stats.dependencies||0),' dependencies'),
+                    React.createElement('div',{className:'architecture-chip'},React.createElement('strong',null,stats.routes||0),' routes'),
+                    React.createElement('div',{className:'architecture-chip'},React.createElement('strong',null,stats.apiRoutes||0),' API routes'),
+                    React.createElement('div',{className:'architecture-chip'},React.createElement('strong',null,stats.databaseTouchpoints||0),' DB touchpoints')
+                ),
+                React.createElement('div',{
+                    className:'mermaid-render'+(architectureDragging?' dragging':''),
+                    ref:architectureRenderRef,
+                    onPointerDown:handleArchitecturePointerDown,
+                    onPointerMove:handleArchitecturePointerMove,
+                    onPointerUp:handleArchitecturePointerUp,
+                    onPointerCancel:handleArchitecturePointerUp,
+                    onWheel:handleArchitectureWheel,
+                    role:'img',
+                    'aria-label':'Architecture block diagram. Drag to pan, mouse wheel to zoom.'
+                })
+            )
+        );
+    }
+    function architectureGroupDotColor(group){
+        if(group==='Browser App'||group==='App Entry / Shell'||group==='Analysis Core'||group==='Frontend Routes'||group==='Frontend Page Components')return'var(--blue)';
+        if(group==='GitHub Action'||group==='Repository Collection'||group==='Backend API / Platform Logic')return'var(--purple)';
+        if(group==='Rendering / Reports'||group==='Storage'||group==='Configuration')return'var(--orange)';
+        if(group==='Content / Data')return'var(--green)';
+        if(group==='Testing'||group==='Fixtures / Examples'||group==='Build Output')return'var(--t3)';
+        return'var(--t2)';
+    }
+    function renderArchitectureBlockList(blocks,emptyText){
+        if(!blocks||!blocks.length)return React.createElement('div',{style:{fontSize:10,color:'var(--t3)',padding:8}},emptyText);
+        return React.createElement('div',{className:'architecture-list'},
+            blocks.slice(0,12).map(function(block){
+                return React.createElement('div',{key:block.id,className:'architecture-list-item'},
+                    React.createElement(StatusDot,{color:architectureGroupDotColor(block.group)}),
+                    React.createElement('span',{title:(block.files&&block.files[0])||block.route||block.title},block.title)
+                );
+            }),
+            blocks.length>12&&React.createElement('div',{style:{fontSize:9,color:'var(--t3)'}},'+',blocks.length-12,' more')
+        );
+    }
+    function renderArchitectureSummary(){
+        var diagram=data&&data.architectureDiagram;
+        if(!diagram)return React.createElement('div',{className:'empty-state'},React.createElement('div',{className:'empty-title'},'No architecture diagram'));
+        var stats=getArchitectureViewStats(diagram,architectureIncludeTests,architectureIncludeBuildOutput);
+        var blocks=getVisibleArchitectureBlocks(diagram.blocks||[],architectureIncludeTests,architectureIncludeBuildOutput);
+        var hidden=diagram.hiddenSummary||{build:0,tests:0,fixtures:0,lowSignal:0,total:0};
+        var groupOrder=getArchitectureGroupOrder(diagram.profile||'generic');
+        var groupCards=groupOrder.map(function(group){
+            var groupBlocks=blocks.filter(function(block){return block.group===group;});
+            if(!groupBlocks.length)return null;
+            return React.createElement('div',{key:group,className:'card'},
+                React.createElement('div',{className:'card-header'},
+                    React.createElement('div',{className:'card-title'},group),
+                    React.createElement('span',{className:'badge badge-default'},groupBlocks.length)
+                ),
+                React.createElement('div',{className:'card-body'},renderArchitectureBlockList(groupBlocks,'No blocks in this group.'))
+            );
+        }).filter(Boolean);
+        return React.createElement(React.Fragment,null,
+            React.createElement('div',{style:{fontSize:12,fontWeight:600,marginBottom:12}},React.createElement(Icon,{name:'layers',size:'m'}),' Architecture Summary'),
+            React.createElement('div',{className:'stats-grid',style:{marginBottom:12}},
+                React.createElement('div',{className:'stat-card'},React.createElement('div',{className:'stat-value'},stats.blocks||0),React.createElement('div',{className:'stat-label'},'Blocks')),
+                React.createElement('div',{className:'stat-card'},React.createElement('div',{className:'stat-value'},stats.dependencies||0),React.createElement('div',{className:'stat-label'},'Deps')),
+                React.createElement('div',{className:'stat-card'},React.createElement('div',{className:'stat-value'},stats.routes||0),React.createElement('div',{className:'stat-label'},'Routes')),
+                React.createElement('div',{className:'stat-card warn'},React.createElement('div',{className:'stat-value'},stats.databaseTouchpoints||0),React.createElement('div',{className:'stat-label'},'DB Touches'))
+            ),
+            React.createElement('div',{className:'card'},
+                React.createElement('div',{className:'card-header'},React.createElement('div',{className:'card-title'},React.createElement(Icon,{name:'globe',size:'s'}),' Framework'),React.createElement('span',{className:'badge badge-info'},diagram.framework)),
+                React.createElement('div',{className:'card-body'},
+                    React.createElement('div',{style:{fontSize:10,color:'var(--t2)',marginBottom:10}},'Type: ',diagram.type,' | Profile: ',diagram.profile||'generic',' | Warnings: ',stats.warnings||0),
+                    React.createElement('div',{style:{display:'flex',gap:8,flexWrap:'wrap'}},
+                        React.createElement('button',{className:'top-btn'+(architectureIncludeTests?' primary':''),style:{fontSize:10,padding:'4px 10px'},onClick:function(){setArchitectureIncludeTests(function(v){return !v;});},type:'button'},'Tests'),
+                        React.createElement('button',{className:'top-btn'+(architectureIncludeBuildOutput?' primary':''),style:{fontSize:10,padding:'4px 10px'},onClick:function(){setArchitectureIncludeBuildOutput(function(v){return !v;});},type:'button'},'Build output')
+                    ),
+                    React.createElement('div',{style:{fontSize:9,color:'var(--t3)',marginTop:8}},'Pan: drag diagram · Zoom: scroll wheel · Export: navbar Export button')
+                )
+            ),
+            hidden.total>0&&React.createElement('div',{className:'card'},
+                React.createElement('div',{className:'card-header'},React.createElement('div',{className:'card-title'},React.createElement(Icon,{name:'info',size:'s'}),' Hidden from diagram'),React.createElement('span',{className:'badge badge-default'},hidden.total)),
+                React.createElement('div',{className:'card-body'},
+                    hidden.build>0&&React.createElement('div',{style:{fontSize:10,color:'var(--t2)',marginBottom:4}},hidden.build,' build file',hidden.build===1?'':'s'),
+                    hidden.tests>0&&React.createElement('div',{style:{fontSize:10,color:'var(--t2)',marginBottom:4}},hidden.tests,' test file',hidden.tests===1?'':'s'),
+                    hidden.fixtures>0&&React.createElement('div',{style:{fontSize:10,color:'var(--t2)',marginBottom:4}},hidden.fixtures,' fixture file',hidden.fixtures===1?'':'s'),
+                    hidden.lowSignal>0&&React.createElement('div',{style:{fontSize:10,color:'var(--t2)',marginBottom:4}},hidden.lowSignal,' low-signal utility file',hidden.lowSignal===1?'':'s')
+                )
+            ),
+            groupCards,
+            diagram.warnings&&diagram.warnings.length>0&&React.createElement('div',{className:'card'},
+                React.createElement('div',{className:'card-header'},React.createElement('div',{className:'card-title'},React.createElement(Icon,{name:'warning',size:'s'}),' Warnings'),React.createElement('span',{className:'badge badge-warning'},diagram.warnings.length)),
+                React.createElement('div',{className:'card-body'},diagram.warnings.map(function(warning,i){return React.createElement('div',{key:i,style:{fontSize:10,color:'var(--t2)',marginBottom:6,lineHeight:1.5}},warning);}))
+            )
+        );
+    }
     var health=useMemo(function(){return calcHealth(data);},[data]);
     return React.createElement('div',{className:'app',style:{'--topbar-height':topbarHeight+'px'}},
         React.createElement('input',{ref:zipInputRef,type:'file',accept:'.zip,application/zip,application/x-zip-compressed',style:{display:'none'},onChange:handleZipSelected}),
@@ -6095,7 +7827,8 @@ function App(){
                         React.createElement('button',{className:'viz-selector-btn'+(graphConfig.vizType==='dendro'?' active':''),onClick:function(){setGraphConfig(Object.assign({},graphConfig,{vizType:'dendro'}));}},iconLabel('tree','Tree')),
                         React.createElement('button',{className:'viz-selector-btn'+(graphConfig.vizType==='sankey'?' active':''),onClick:function(){setGraphConfig(Object.assign({},graphConfig,{vizType:'sankey'}));}},iconLabel('flow','Flow')),
                         React.createElement('button',{className:'viz-selector-btn'+(graphConfig.vizType==='disjoint'?' active':''),onClick:function(){setGraphConfig(Object.assign({},graphConfig,{vizType:'disjoint'}));}},iconLabel('cluster','Cluster')),
-                        React.createElement('button',{className:'viz-selector-btn'+(graphConfig.vizType==='bundle'?' active':''),onClick:function(){setGraphConfig(Object.assign({},graphConfig,{vizType:'bundle'}));}},iconLabel('target','Bundle'))
+                        React.createElement('button',{className:'viz-selector-btn'+(graphConfig.vizType==='bundle'?' active':''),onClick:function(){setGraphConfig(Object.assign({},graphConfig,{vizType:'bundle'}));}},iconLabel('target','Bundle')),
+                        React.createElement('button',{className:'viz-selector-btn'+(graphConfig.vizType==='architecture'?' active':''),onClick:function(){setGraphConfig(Object.assign({},graphConfig,{vizType:'architecture'}));setSelected(null);setBlastRadius(null);}},iconLabel('layers','Block Diagram'))
                     ),
                     graphConfig.vizType==='graph'&&React.createElement('svg',{ref:svgRef}),
                     graphConfig.vizType==='treemap'&&React.createElement('div',{ref:treemapRef,className:'treemap-container'}),
@@ -6104,6 +7837,7 @@ function App(){
                     graphConfig.vizType==='sankey'&&React.createElement('div',{ref:sankeyRef,className:'sankey-container',style:{width:'100%',height:'100%',position:'relative'}}),
                     graphConfig.vizType==='disjoint'&&React.createElement('div',{ref:disjointRef,className:'disjoint-container',style:{width:'100%',height:'100%',position:'relative'}}),
                     graphConfig.vizType==='bundle'&&React.createElement('div',{ref:bundleRef,className:'bundle-container'}),
+                    graphConfig.vizType==='architecture'&&renderArchitectureView(),
                     graphConfig.vizType==='graph'&&React.createElement('div',{className:'canvas-toolbar'},
                         React.createElement('button',{className:'tool-btn',onClick:zoomIn,'aria-label':'Zoom in'},'+'),
                         React.createElement('button',{className:'tool-btn',onClick:zoomOut,'aria-label':'Zoom out'},'−'),
@@ -6143,7 +7877,7 @@ function App(){
                             'Curved links'
                         )
                     ),
-                    React.createElement('div',{className:'canvas-info'},
+                    graphConfig.vizType!=='architecture'&&React.createElement('div',{className:'canvas-info'},
                         React.createElement('div',{className:'info-chip'},React.createElement('strong',null,folderFilter?data.files.filter(function(f){return f.folder===folderFilter||f.folder.startsWith(folderFilter+'/');}).length:data.files.length),' files'),
                         React.createElement('div',{className:'info-chip'},React.createElement('strong',null,data.connections.length),' links'),
                         data.excludePatterns&&data.excludePatterns.length>0&&React.createElement('div',{className:'info-chip'},
@@ -6160,7 +7894,7 @@ function App(){
                             blastRadius.fnsUsed>0?' • '+blastRadius.fnsUsed+' fns used':''
                         )
                     ),
-                    React.createElement('div',{className:'legend'+(legendCollapsed?' collapsed':'')},
+                    graphConfig.vizType!=='architecture'&&React.createElement('div',{className:'legend'+(legendCollapsed?' collapsed':'')},
                         React.createElement('div',{className:'legend-header',onClick:function(){setLegendCollapsed(!legendCollapsed);}},
                             React.createElement('div',{className:'legend-title',style:{margin:0}},colorMode==='folder'?'Folders':colorMode==='layer'?'Layers':'Churn'),
                             React.createElement('span',{className:'legend-toggle'},'▼')
@@ -6194,7 +7928,7 @@ function App(){
                 }}),
                 data?React.createElement(React.Fragment,null,
                     React.createElement('div',{className:'panel-tabs'},
-                        React.createElement('button',{className:'panel-tab'+(rightTab==='details'?' active':''),onClick:function(){setRightTab('details');setDrillDown(null);}},selected?iconLabel('file','FILE'):iconLabel('search','ISSUES')),
+                        React.createElement('button',{className:'panel-tab'+(rightTab==='details'?' active':''),onClick:function(){setRightTab('details');setDrillDown(null);}},selected?iconLabel('file','FILE'):(graphConfig.vizType==='architecture'?iconLabel('layers','ARCH'):iconLabel('search','ISSUES'))),
                         React.createElement('button',{className:'panel-tab'+(rightTab==='patterns'?' active':''),onClick:function(){setRightTab('patterns');setDrillDown(null);}},iconLabel('puzzle','PATTERNS'),' ',React.createElement('span',{className:'badge badge-default'},data.patterns.length)),
                         React.createElement('button',{className:'panel-tab'+(rightTab==='security'?' active':''),onClick:function(){setRightTab('security');setDrillDown(null);}},iconLabel('security','SECURITY'),data.stats.security>0&&React.createElement('span',{className:'view-mode-badge',style:{marginLeft:4}},data.stats.security)),
                         React.createElement('button',{className:'panel-tab'+(rightTab==='suggestions'?' active':''),onClick:function(){setRightTab('suggestions');setDrillDown(null);}},iconLabel('action','ACTIONS'),data.suggestions&&data.suggestions.length>0&&React.createElement('span',{className:'view-mode-badge',style:{marginLeft:4}},data.suggestions.length))
@@ -6365,7 +8099,7 @@ function App(){
                                     })
                                 )
                             )
-                        ):React.createElement(React.Fragment,null,
+                        ):graphConfig.vizType==='architecture'?renderArchitectureSummary():React.createElement(React.Fragment,null,
                             React.createElement('div',{style:{fontSize:12,fontWeight:600,marginBottom:12}},React.createElement(Icon,{name:'search',size:'m'}),' Architecture Issues (',data.issues.length,')'),
                             data.issues.length===0?React.createElement('div',{style:{textAlign:'center',padding:20}},React.createElement(Icon,{name:'spark',size:'xxl',className:'empty-icon'}),React.createElement('div',{style:{color:'var(--green)'}},'No issues detected!')):
                             data.issues.map(function(issue,i){return React.createElement('div',{key:i,className:'security-item '+(issue.type==='critical'?'high':'medium'),style:{cursor:'pointer'},onClick:function(){setDrillDown({type:'issue',data:issue});}},
@@ -6455,11 +8189,21 @@ function App(){
             React.createElement('div',{className:'modal',onClick:function(e){e.stopPropagation();},style:{maxWidth:480}},
                 React.createElement('div',{className:'modal-header'},React.createElement('div',{className:'modal-title'},iconLabel('export','Export','m')),React.createElement('button',{className:'modal-close',onClick:function(){setShowExport(false);}},'×')),
                 React.createElement('div',{className:'modal-body'},
-                    React.createElement('div',{style:{fontSize:10,fontWeight:600,color:'var(--t3)',textTransform:'uppercase',marginBottom:8}},'Visualization'),
-                    React.createElement('div',{className:'export-options'},
-                        React.createElement('div',{className:'export-option',onClick:function(){exportSVG();setShowExport(false);}},React.createElement('div',{className:'export-option-icon'},React.createElement(Icon,{name:'image',size:'xl'})),React.createElement('div',{className:'export-option-label'},'SVG Image')),
-                        React.createElement('div',{className:'export-option',onClick:function(){exportPDF();setShowExport(false);}},React.createElement('div',{className:'export-option-icon'},React.createElement(Icon,{name:'file-pdf',size:'xl'})),React.createElement('div',{className:'export-option-label'},'PDF Document')),
-                        React.createElement('div',{className:'export-option',onClick:function(){copyLink();setShowExport(false);}},React.createElement('div',{className:'export-option-icon'},React.createElement(Icon,{name:'link',size:'xl'})),React.createElement('div',{className:'export-option-label'},'Share Link'))
+                    data&&data.architectureDiagram&&React.createElement(React.Fragment,null,
+                        React.createElement('div',{style:{fontSize:10,fontWeight:600,color:'var(--t3)',textTransform:'uppercase',marginBottom:8}},graphConfig.vizType==='architecture'?'Block Diagram (current view)':'Block Diagram'),
+                        React.createElement('div',{className:'export-options'},
+                            React.createElement('div',{className:'export-option',onClick:function(){copyMermaid();setShowExport(false);}},React.createElement('div',{className:'export-option-icon'},React.createElement(Icon,{name:'copy',size:'xl'})),React.createElement('div',{className:'export-option-label'},'Copy Mermaid')),
+                            React.createElement('div',{className:'export-option',onClick:function(){downloadMermaid();setShowExport(false);}},React.createElement('div',{className:'export-option-icon'},React.createElement(Icon,{name:'code',size:'xl'})),React.createElement('div',{className:'export-option-label'},'Mermaid File')),
+                            React.createElement('div',{className:'export-option',onClick:function(){downloadArchitectureSVG();setShowExport(false);}},React.createElement('div',{className:'export-option-icon'},React.createElement(Icon,{name:'image',size:'xl'})),React.createElement('div',{className:'export-option-label'},'Diagram SVG'))
+                        )
+                    ),
+                    graphConfig.vizType!=='architecture'&&React.createElement(React.Fragment,null,
+                        React.createElement('div',{style:{fontSize:10,fontWeight:600,color:'var(--t3)',textTransform:'uppercase',marginBottom:8,marginTop:data&&data.architectureDiagram?16:0}},'Graph Visualization'),
+                        React.createElement('div',{className:'export-options'},
+                            React.createElement('div',{className:'export-option',onClick:function(){exportSVG();setShowExport(false);}},React.createElement('div',{className:'export-option-icon'},React.createElement(Icon,{name:'image',size:'xl'})),React.createElement('div',{className:'export-option-label'},'SVG Image')),
+                            React.createElement('div',{className:'export-option',onClick:function(){exportPDF();setShowExport(false);}},React.createElement('div',{className:'export-option-icon'},React.createElement(Icon,{name:'file-pdf',size:'xl'})),React.createElement('div',{className:'export-option-label'},'PDF Document')),
+                            React.createElement('div',{className:'export-option',onClick:function(){copyLink();setShowExport(false);}},React.createElement('div',{className:'export-option-icon'},React.createElement(Icon,{name:'link',size:'xl'})),React.createElement('div',{className:'export-option-label'},'Share Link'))
+                        )
                     ),
                     React.createElement('div',{style:{fontSize:10,fontWeight:600,color:'var(--t3)',textTransform:'uppercase',marginBottom:8,marginTop:16}},'Analysis Report'),
                     React.createElement('div',{style:{fontSize:9,color:'var(--t2)',marginBottom:10}},'Complete analysis with files, functions, patterns, security issues, and dependencies'),
