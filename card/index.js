@@ -11,6 +11,7 @@ const path = require('path');
 const { loadInputs } = require('./lib/inputs.js');
 const { loadAnalyzer, locateIndexHtml } = require('./lib/analyzer.js');
 const { buildAnalyzed } = require('./lib/collect.js');
+const { compileExcludePatterns } = require('./lib/exclude.js');
 const { readState, appendRun, writeState, snapshotFromAnalysis } = require('./lib/state.js');
 const { renderCard } = require('./render/card.js');
 const { renderReceiptMarkdown } = require('./render/receipt-md.js');
@@ -52,13 +53,18 @@ async function run() {
 
   const { Parser, buildAnalysisData, calcBlast, calcHealth } = loadAnalyzer(indexHtmlPath);
 
-  const { analyzed, allFns } = await buildAnalyzed(repoRoot, Parser);
+  const excludePatterns = compileExcludePatterns(inputs.exclude);
+  if (excludePatterns.length > 0) {
+    log('exclude patterns: ' + excludePatterns.map((p) => p.raw).join(', '));
+  }
+
+  const { analyzed, allFns } = await buildAnalyzed(repoRoot, Parser, excludePatterns);
   log('collected ' + analyzed.length + ' files (' + allFns.length + ' functions)');
 
   const data = await buildAnalysisData({
     analyzed,
     allFns,
-    excludePatterns: [],
+    excludePatterns: excludePatterns.map((p) => p.raw),
     progress: () => {},
     yieldFn: async () => {},
   });

@@ -5,6 +5,10 @@ branding:
   icon: 'activity'
   color: 'purple'
 inputs:
+  exclude:
+    description: 'Comma- or newline-separated path patterns to skip during analysis, same syntax as the web app''s custom excludes (e.g. `vendor/**, apps/web/public/**, *.min.js`, or a bare directory name). Use for vendored/generated trees that would otherwise dominate the stats or slow the analysis.'
+    required: false
+    default: ''
   output:
     description: 'Path to write the card SVG.'
     required: false

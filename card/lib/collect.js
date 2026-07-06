@@ -6,6 +6,8 @@
 const fs = require('fs');
 const path = require('path');
 
+const { matchesExcludePattern } = require('./exclude.js');
+
 const DEFAULT_IGNORES = new Set([
   '.git',
   'node_modules',
@@ -29,7 +31,7 @@ const DEFAULT_IGNORES = new Set([
   'obj',
 ]);
 
-function walk(root, current, files, Parser) {
+function walk(root, current, files, Parser, excludePatterns) {
   let entries;
   try {
     entries = fs.readdirSync(current, { withFileTypes: true });
@@ -40,13 +42,18 @@ function walk(root, current, files, Parser) {
     if (entry.name.startsWith('.git')) continue;
     if (DEFAULT_IGNORES.has(entry.name)) continue;
     const full = path.join(current, entry.name);
+    const repoPath = path.relative(root, full).split(path.sep).join('/');
+    // Prune excluded paths during the walk — exclusion must happen before
+    // Parser.extract/buildAnalysisData ever see the files, or huge vendored
+    // trees (minified bundles, absorbed third-party code) blow the analysis
+    // phase up from seconds to hours.
+    if (matchesExcludePattern(excludePatterns, repoPath, entry.name)) continue;
     if (entry.isDirectory()) {
-      walk(root, full, files, Parser);
+      walk(root, full, files, Parser, excludePatterns);
       continue;
     }
     if (!entry.isFile()) continue;
     if (!Parser.isIncluded(entry.name)) continue;
-    const repoPath = path.relative(root, full).split(path.sep).join('/');
     files.push({
       fullPath: full,
       path: repoPath,
@@ -57,9 +64,9 @@ function walk(root, current, files, Parser) {
   }
 }
 
-async function buildAnalyzed(repoRoot, Parser) {
+async function buildAnalyzed(repoRoot, Parser, excludePatterns) {
   const files = [];
-  walk(repoRoot, repoRoot, files, Parser);
+  walk(repoRoot, repoRoot, files, Parser, excludePatterns || []);
   files.sort((a, b) => a.path.localeCompare(b.path));
 
   const analyzed = [];
